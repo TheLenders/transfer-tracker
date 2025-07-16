@@ -1004,3 +1004,35 @@ document.getElementById("delete-user-btn").addEventListener("click", function ()
     populateUserManagementDropdown();
   });
 });
+
+// AI Chat Widget Toggle
+document.getElementById("chatbot-toggle").addEventListener("click", () => {
+  document.getElementById("chatbot-container").style.display = "block";
+  document.getElementById("chatbot-toggle").style.display = "none";
+});
+
+document.getElementById("chatbot-close").addEventListener("click", () => {
+  document.getElementById("chatbot-container").style.display = "none";
+  document.getElementById("chatbot-toggle").style.display = "block";
+});
+
+// Placeholder for sending messages
+document.getElementById("chatbot-send").addEventListener("click", () => {
+  const input = document.getElementById("chatbot-input");
+  const messages = document.getElementById("chatbot-messages");
+
+  const userMessage = input.value.trim();
+  if (!userMessage) return;
+
+  const userBubble = document.createElement("div");
+  userBubble.textContent = "🧑 " + userMessage;
+  messages.appendChild(userBubble);
+  input.value = "";
+
+  // Temporary fake response for now
+  const botBubble = document.createElement("div");
+  botBubble.textContent = "🤖 Let me think...";
+  messages.appendChild(botBubble);
+
+  messages.scrollTop = messages.scrollHeight;
+});
