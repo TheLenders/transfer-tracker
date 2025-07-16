@@ -2,18 +2,20 @@
 
 import { OpenAI } from "openai";
 
-// Initialize OpenAI using your secret key from environment variables
+// Initialize OpenAI using secret key from environment variables
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-// Handle POST requests
-export async function POST(req) {
-  try {
-    // Parse the incoming request body
-    const { messages } = await req.json();
+// ✅ Vercel-compatible API handler
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
 
-    // Create a chat completion request to OpenAI
+  try {
+    const { messages } = req.body;
+
     const response = await openai.chat.completions.create({
       model: "gpt-4",
       messages: [
@@ -66,18 +68,11 @@ Always be friendly, short, clear, and professional.
       max_tokens: 800
     });
 
-    // Return the AI-generated message
-    return new Response(
-      JSON.stringify({
-        reply: response.choices[0].message.content
-      }),
-      { headers: { "Content-Type": "application/json" }, status: 200 }
-    );
-  } catch (error) {
-    console.error("❌ Chat API error:", error);
-    return new Response(
-      JSON.stringify({ error: "Failed to process chat request." }),
-      { status: 500 }
-    );
+    res.status(200).json({
+      reply: response.choices[0].message.content
+    });
+  } catch (err) {
+    console.error("❌ Chat error:", err);
+    res.status(500).json({ error: "Failed to process chat request." });
   }
 }
