@@ -1,0 +1,75 @@
+body {
+  background-color: #f0f0f0;
+  font-family: Arial, sans-serif;
+  text-align: center;
+  padding-top: 50px;
+  margin: 0;
+}
+
+#login-container,
+#agent-dashboard,
+#manager-dashboard {
+  background-color: #fff;
+  padding: 40px;
+  width: 90%;
+  max-width: 900px;
+  margin: auto;
+  border-radius: 12px;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+}
+
+#logo {
+  width: 180px;
+  margin-bottom: 20px;
+}
+
+.card {
+  background: #f9f9f9;
+  margin-top: 20px;
+  padding: 20px;
+  border-radius: 10px;
+  text-align: left;
+}
+
+input,
+textarea {
+  width: 90%;
+  padding: 8px;
+  margin: 6px 0;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+button {
+  padding: 10px 20px;
+  border: none;
+  background-color: #3a7bd5;
+  color: white;
+  font-weight: bold;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+button:hover {
+  background-color: #335fb1;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-top: 10px;
+  font-size: 14px;
+}
+
+th, td {
+  border: 1px solid #ccc;
+  padding: 6px;
+  text-align: center;
+}
+
+.card table {
+  display: block;
+  overflow-x: auto;
+  white-space: nowrap;
+}

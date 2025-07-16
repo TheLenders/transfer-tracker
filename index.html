@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Transfer Tracker</title>
+  <link rel="stylesheet" href="styles.css" />
+  <meta name="robots" content="noindex, nofollow">
+</head>
+<body>
+
+  <!-- LOGIN SECTION -->
+  <div id="login-container">
+    <img src="assets/logo.png" alt="Lending Force Logo" id="logo" />
+    <h1>Transfer Tracker Login</h1>
+    <label for="username">Username:</label><br />
+    <input type="text" id="username" /><br /><br />
+    <label for="password">Password:</label><br />
+    <input type="password" id="password" /><br /><br />
+    <button id="login-btn">Login</button>
+  </div>
+
+  <!-- AGENT DASHBOARD -->
+  <div id="agent-dashboard" style="display: none;">
+    <button id="logout-btn" style="float: right;">Logout</button>
+    <h2>Welcome, <span id="agent-name"></span></h2>
+
+    <div class="card">
+      <p>📊 Transfers Today: <span id="transfer-count">0</span></p>
+      <p>☎️ Calls Today: <span id="dial-count">0</span></p>
+      <p>🎯 Conversion: <span id="conversion-rate">0%</span></p>
+    </div>
+
+    <div class="card">
+      <h3>New Transfer</h3>
+      <label>Date:</label><br />
+      <input type="date" id="transfer-date" /><br /><br />
+      <small id="date-warning" style="color: red; display: none;">
+        Backdating requires manager approval.
+      </small><br /><br />
+      <input type="text" id="client-name" placeholder="Client Name" /><br />
+      <input type="text" id="client-phone" placeholder="Phone Number" /><br />
+      <input type="text" id="banker" placeholder="Banker" /><br />
+      <input type="text" id="loan-purpose" placeholder="Loan Purpose" /><br />
+      <textarea id="notes" placeholder="Notes"></textarea><br />
+      <button id="submit-transfer">Submit Transfer</button><br /><br />
+      <button id="request-backdate-btn">Request Backdate Approval</button>
+    </div>
+
+    <div class="card">
+      <h3>Update Call Count</h3>
+      <input type="number" id="call-input" placeholder="Enter # of calls" />
+      <button id="submit-calls">Save Calls</button>
+    </div>
+
+    <div class="card">
+      <h3>My Transfers Today</h3>
+      <ul id="transfer-list"></ul>
+    </div>
+
+    <div class="card">
+      <h3>Team Leaderboard</h3>
+      <table id="leaderboard-table" style="width: 100%;">
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Agent</th>
+            <th>Transfers</th>
+            <th>Calls</th>
+            <th>Conversion</th>
+            <th>Badge</th>
+          </tr>
+        </thead>
+        <tbody id="leaderboard-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- MANAGER DASHBOARD -->
+  <div id="manager-dashboard" style="display: none;">
+    <button id="logout-btn-manager" style="float: right;">Logout</button>
+    <h2>Manager Dashboard</h2>
+
+    <div class="card">
+      <h3>Team Summary (Today)</h3>
+      <p>Total Transfers: <span id="total-transfers">0</span></p>
+      <p>Total Calls: <span id="total-calls">0</span></p>
+      <p>Average Conversion: <span id="avg-conversion">0%</span></p>
+    </div>
+
+    <div class="card">
+      <h3>Leaderboard</h3>
+      <table style="width: 100%;">
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Agent</th>
+            <th>Transfers</th>
+            <th>Calls</th>
+            <th>Conversion</th>
+          </tr>
+        </thead>
+        <tbody id="manager-leaderboard"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>Admin Panel</h3>
+
+      <h4 style="margin-top: 20px;">Override Call Counts (Today)</h4>
+      <select id="override-agent-select"></select><br /><br />
+      <input type="number" id="override-dials" placeholder="Enter new call count" />
+      <button id="override-save-btn">Save Override</button>
+
+      <h4 style="margin-top: 30px;">Create New User Account</h4>
+      <input type="text" id="new-user-name" placeholder="Username" /><br />
+      <input type="password" id="new-user-pass" placeholder="Password" /><br />
+      <select id="new-user-role">
+        <option value="agent">Agent</option>
+        <option value="manager">Manager</option>
+      </select><br /><br />
+      <button id="create-user-btn">Create Account</button>
+
+      <div class="card">
+        <h3>User Account Management</h3>
+        <select id="manage-user-select" style="width: 100%; margin-bottom: 10px;"></select>
+        <input type="password" id="reset-user-pass" placeholder="New Password" style="width: 100%;" />
+        <button id="reset-pass-btn" style="margin-top: 5px;">Reset Password</button><br /><br />
+        <select id="change-role-select" style="width: 100%;">
+          <option value="agent">Change Role to: Agent</option>
+          <option value="manager">Change Role to: Manager</option>
+        </select>
+        <button id="change-role-btn" style="margin-top: 5px;">Change Role</button><br /><br />
+        <button id="delete-user-btn" style="background-color: #a33; color: white;">Delete User</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Backdate Requests</h3>
+      <ul id="backdate-requests"></ul>
+    </div>
+
+    <div class="card">
+      <h3>Hourly Transfer Breakdown (Today)</h3>
+      <table style="width: 100%;">
+        <thead>
+          <tr><th>Hour</th><th>Transfers</th></tr>
+        </thead>
+        <tbody id="hourly-transfer-table"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>Agent Transfer Analytics</h3>
+      <label>Select Agent:</label><br />
+      <select id="analytics-agent-select"></select>
+      <table style="width: 100%; margin-top: 10px;">
+        <thead>
+          <tr><th>Hour</th><th>Transfers</th></tr>
+        </thead>
+        <tbody id="agent-hourly-table"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>Audit Log</h3>
+      <table style="width: 100%;">
+        <thead>
+          <tr><th>Time</th><th>User</th><th>Role</th><th>Action</th><th>Details</th></tr>
+        </thead>
+        <tbody id="audit-log-table"></tbody>
+      </table>
+      <button id="download-audit-btn">Download Audit CSV</button>
+    </div>
+  </div>
+
+  <!-- Load your main script LAST -->
+  <script type="module" src="app.js"></script>
+</body>
+</html>
