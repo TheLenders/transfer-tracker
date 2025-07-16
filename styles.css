@@ -5,6 +5,12 @@ body {
   padding-top: 50px;
   margin: 0;
 }
+/* Ensure consistent box sizing across inputs */
+input,
+select,
+textarea {
+  box-sizing: border-box;
+}
 
 #login-container,
 #agent-dashboard,
@@ -75,17 +81,11 @@ th, td {
 }
 
 select {
-  width: 95%;
+  width: 90%;
   padding: 8px;
   margin-bottom: 10px;
   font-size: 16px;
   border: 1px solid #ccc;
   border-radius: 4px;
   
-}
-
-input,
-select,
-textarea {
-  box-sizing: border-box;
 }
