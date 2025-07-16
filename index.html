@@ -39,8 +39,17 @@
       </small><br /><br />
       <input type="text" id="client-name" placeholder="Client Name" /><br />
       <input type="text" id="client-phone" placeholder="Phone Number" /><br />
-      <input type="text" id="banker" placeholder="Banker" /><br />
-      <input type="text" id="loan-purpose" placeholder="Loan Purpose" /><br />
+
+<select id="banker">
+  <option value="">Select Banker</option>
+  <option value="Inbound">Inbound</option>
+</select><br />
+
+<select id="loan-purpose">
+  <option value="">Select Loan Purpose</option>
+  <option value="HELOC">HELOC</option>
+</select><br />
+
       <textarea id="notes" placeholder="Notes"></textarea><br />
       <button id="submit-transfer">Submit Transfer</button><br /><br />
       <button id="request-backdate-btn">Request Backdate Approval</button>

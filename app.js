@@ -391,6 +391,15 @@ function renderTransfers() {
   });
 }
 
+document.getElementById("client-phone").addEventListener("keydown", function (e) {
+  if (e.key === "Enter") {
+    const raw = this.value.replace(/\D/g, ""); // remove all non-digits
+    if (raw.length === 10) {
+      const formatted = `(${raw.slice(0,3)}) ${raw.slice(3,6)}-${raw.slice(6)}`;
+      this.value = formatted;
+    }
+  }
+});
 
 // === UPDATE STATS ===
 function updateStats(transferCount) {
