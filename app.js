@@ -213,6 +213,39 @@ function renderAgentScorecard(agentName) {
   });
 }
 
+document.addEventListener("DOMContentLoaded", () => {
+  const toggle = document.getElementById("chatbot-toggle");
+  if (toggle) {
+    toggle.addEventListener("click", () => {
+      document.getElementById("chatbot-container").style.display = "block";
+      toggle.style.display = "none";
+    });
+
+    document.getElementById("chatbot-close").addEventListener("click", () => {
+      document.getElementById("chatbot-container").style.display = "none";
+      toggle.style.display = "block";
+    });
+
+    document.getElementById("chatbot-send").addEventListener("click", () => {
+      const input = document.getElementById("chatbot-input");
+      const messages = document.getElementById("chatbot-messages");
+
+      const userMessage = input.value.trim();
+      if (!userMessage) return;
+
+      const userBubble = document.createElement("div");
+      userBubble.textContent = "🧑 " + userMessage;
+      messages.appendChild(userBubble);
+      input.value = "";
+
+      const botBubble = document.createElement("div");
+      botBubble.textContent = "🤖 Let me think...";
+      messages.appendChild(botBubble);
+
+      messages.scrollTop = messages.scrollHeight;
+    });
+  }
+});
 // === LOGIN ===
 
 document.getElementById("login-btn").addEventListener("click", () => {
@@ -1036,3 +1069,4 @@ document.getElementById("chatbot-send").addEventListener("click", () => {
 
   messages.scrollTop = messages.scrollHeight;
 });
+
