@@ -1,16 +1,15 @@
 // File: /api/chat.js
 
-import { OpenAI } from "openai";
+const { OpenAI } = require("openai");
 
-// Initialize OpenAI using secret key from environment variables
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-// ✅ Vercel-compatible API handler
-export default async function handler(req, res) {
+module.exports = async (req, res) => {
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+    res.status(405).json({ error: "Method not allowed" });
+    return;
   }
 
   try {
@@ -60,7 +59,7 @@ If someone asks an unrelated or inappropriate question, respond with:
 “I’m here to help with Transfer Tracker only. Let me know what you need help with!”
 
 Always be friendly, short, clear, and professional.
-          `
+`
         },
         ...messages
       ],
@@ -68,11 +67,11 @@ Always be friendly, short, clear, and professional.
       max_tokens: 800
     });
 
-    res.status(200).json({
-      reply: response.choices[0].message.content
-    });
-  } catch (err) {
-    console.error("❌ Chat error:", err);
-    res.status(500).json({ error: "Failed to process chat request." });
+    const reply = response.choices[0].message.content;
+    res.status(200).json({ reply });
+
+  } catch (error) {
+    console.error("❌ Chat API error:", error);
+    res.status(500).json({ error: "Server error: Failed to generate response." });
   }
-}
+};
