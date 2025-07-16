@@ -7,17 +7,6 @@
   <meta name="robots" content="noindex, nofollow">
 </head>
 <!-- AI Chat Widget -->
-<div id="chatbot-toggle">💬 Help</div>
-
-<div id="chatbot-container" style="display: none;">
-  <div id="chatbot-header">
-    <span>AI Help Assistant</span>
-    <button id="chatbot-close">×</button>
-  </div>
-  <div id="chatbot-messages"></div>
-  <input type="text" id="chatbot-input" placeholder="Ask a question..." />
-  <button id="chatbot-send">Send</button>
-</div>
 
 <body>
 
@@ -198,5 +187,62 @@
 
   <!-- Load your main script LAST -->
   <script type="module" src="app.js"></script>
+  <!-- 🧠 AI Chat Assistant -->
+<div id="chat-widget">
+  <button id="chat-toggle">💬</button>
+  <div id="chat-box" style="display: none;">
+    <div id="chat-messages"></div>
+    <input type="text" id="chat-input" placeholder="Ask for help..." />
+  </div>
+</div>
+
+<script type="module">
+  const toggle = document.getElementById("chat-toggle");
+  const box = document.getElementById("chat-box");
+  const input = document.getElementById("chat-input");
+  const messagesDiv = document.getElementById("chat-messages");
+
+  let chatHistory = [];
+
+  toggle.addEventListener("click", () => {
+    box.style.display = box.style.display === "none" ? "block" : "none";
+  });
+
+  input.addEventListener("keydown", async (e) => {
+    if (e.key === "Enter" && input.value.trim() !== "") {
+      const userMsg = input.value.trim();
+      input.value = "";
+      appendMessage("You", userMsg);
+
+      chatHistory.push({ role: "user", content: userMsg });
+
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: chatHistory })
+        });
+        const data = await res.json();
+        if (data.reply) {
+          chatHistory.push({ role: "assistant", content: data.reply });
+          appendMessage("AI", data.reply);
+        } else {
+          appendMessage("AI", "Sorry, I couldn’t respond.");
+        }
+      } catch (err) {
+        console.error("Chat error:", err);
+        appendMessage("AI", "There was a connection error.");
+      }
+    }
+  });
+
+  function appendMessage(sender, text) {
+    const div = document.createElement("div");
+    div.innerHTML = `<strong>${sender}:</strong> ${text}`;
+    messagesDiv.appendChild(div);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  }
+</script>
+
 </body>
 </html>
