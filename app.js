@@ -57,7 +57,8 @@ function showDashboard(role) {
     if (user.role === "manager") {
       dashboardManager.style.display = "block";
 
-      renderManagerLeaderboard();
+      const today = getToday();
+      renderManagerLeaderboardFiltered(today, today);
       renderManagerSummary();
       populateOverrideDropdown();
       renderBackdateInbox();
@@ -244,21 +245,24 @@ function renderAgentScorecard(agentName) {
 
 document.addEventListener("DOMContentLoaded", () => {
   const toggle = document.getElementById("chatbot-toggle");
-  if (toggle) {
+  const box = document.getElementById("chatbot-container");
+  const input = document.getElementById("chatbot-input");
+  const messages = document.getElementById("chatbot-messages");
+
+  if (toggle && box && input && messages) {
+    let chatHistory = [];
+
     toggle.addEventListener("click", () => {
-      document.getElementById("chatbot-container").style.display = "block";
+      box.style.display = "block";
       toggle.style.display = "none";
     });
 
     document.getElementById("chatbot-close").addEventListener("click", () => {
-      document.getElementById("chatbot-container").style.display = "none";
+      box.style.display = "none";
       toggle.style.display = "block";
     });
 
     document.getElementById("chatbot-send").addEventListener("click", () => {
-      const input = document.getElementById("chatbot-input");
-      const messages = document.getElementById("chatbot-messages");
-
       const userMessage = input.value.trim();
       if (!userMessage) return;
 
@@ -1082,24 +1086,6 @@ function renderAuditLog() {
 }
 
 
-document.getElementById("download-audit-btn").addEventListener("click", function () {
-  const logs = JSON.parse(localStorage.getItem("auditLog")) || [];
-  let csv = "Timestamp,User,Role,Action,Details\n";
-
-  logs.forEach(log => {
-    csv += `"${log.timestamp}","${log.user}","${log.role}","${log.action}","${log.details}"\n`;
-  });
-
-  const blob = new Blob([csv], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "audit_log.csv";
-  a.click();
-  URL.revokeObjectURL(url);
-});
-
-
 document.getElementById("create-user-btn").addEventListener("click", () => {
   const username = document.getElementById("new-user-name").value.trim();
   const password = document.getElementById("new-user-pass").value;
@@ -1169,47 +1155,6 @@ document.getElementById("delete-user-btn").addEventListener("click", function ()
   });
 });
 
-// AI Chat Widget Toggle
-document.getElementById("chatbot-toggle").addEventListener("click", () => {
-  document.getElementById("chatbot-container").style.display = "block";
-  document.getElementById("chatbot-toggle").style.display = "none";
-});
-
-document.getElementById("chatbot-close").addEventListener("click", () => {
-  document.getElementById("chatbot-container").style.display = "none";
-  document.getElementById("chatbot-toggle").style.display = "block";
-});
-
-// Placeholder for sending messages
-document.getElementById("chatbot-send").addEventListener("click", () => {
-  const input = document.getElementById("chatbot-input");
-  const messages = document.getElementById("chatbot-messages");
-
-  const userMessage = input.value.trim();
-  if (!userMessage) return;
-
-  const userBubble = document.createElement("div");
-  userBubble.textContent = "🧑 " + userMessage;
-  messages.appendChild(userBubble);
-  input.value = "";
-
-  // Temporary fake response for now
-  const botBubble = document.createElement("div");
-  botBubble.textContent = "🤖 Let me think...";
-  messages.appendChild(botBubble);
-
-  messages.scrollTop = messages.scrollHeight;
-});
-
-document.getElementById("agent-time-view").addEventListener("change", function () {
-  const filter = this.value;
-  renderAgentDashboardView(filter);
-});
-
-document.getElementById("manager-time-view").addEventListener("change", function () {
-  const filter = this.value;
-  renderManagerDashboardView(filter);
-});
 
 function renderAgentDashboardView(filter) {
   const username = localStorage.getItem("username");
@@ -1312,3 +1257,78 @@ function getDateRangeDays(start, end) {
 
   return result;
 }
+
+document.addEventListener("DOMContentLoaded", () => {
+  const auditBtn = document.getElementById("download-audit-btn");
+  if (auditBtn) {
+    auditBtn.addEventListener("click", function () {
+      const logs = JSON.parse(localStorage.getItem("auditLog")) || [];
+      let csv = "Timestamp,User,Role,Action,Details\n";
+
+      logs.forEach(log => {
+        csv += `"${log.timestamp}","${log.user}","${log.role}","${log.action}","${log.details}"\n`;
+      });
+
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "audit_log.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  }
+
+  const toggle = document.getElementById("chatbot-toggle");
+  const box = document.getElementById("chatbot-container");
+  const input = document.getElementById("chatbot-input");
+  const messages = document.getElementById("chatbot-messages");
+
+  if (toggle && box && input && messages) {
+    toggle.addEventListener("click", () => {
+      box.style.display = "block";
+      toggle.style.display = "none";
+    });
+
+    const close = document.getElementById("chatbot-close");
+    if (close) {
+      close.addEventListener("click", () => {
+        box.style.display = "none";
+        toggle.style.display = "block";
+      });
+    }
+
+    const send = document.getElementById("chatbot-send");
+    if (send) {
+      send.addEventListener("click", () => {
+        const userMessage = input.value.trim();
+        if (!userMessage) return;
+
+        const userBubble = document.createElement("div");
+        userBubble.textContent = "🧑 " + userMessage;
+        messages.appendChild(userBubble);
+        input.value = "";
+
+        const botBubble = document.createElement("div");
+        botBubble.textContent = "🤖 Let me think...";
+        messages.appendChild(botBubble);
+
+        messages.scrollTop = messages.scrollHeight;
+      });
+    }
+  }
+
+  const agentTime = document.getElementById("agent-time-view");
+  if (agentTime) {
+    agentTime.addEventListener("change", function () {
+      renderAgentDashboardView(this.value);
+    });
+  }
+
+  const managerTime = document.getElementById("manager-time-view");
+  if (managerTime) {
+    managerTime.addEventListener("change", function () {
+      renderManagerDashboardView(this.value);
+    });
+  }
+});
