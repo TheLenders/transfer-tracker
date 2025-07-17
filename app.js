@@ -358,47 +358,36 @@ document.getElementById("submit-transfer").addEventListener("click", function ()
     }
   }
 
-  const client = document.getElementById("client-name");
-  const phone = document.getElementById("client-phone");
-  const banker = document.getElementById("banker");
-  const loanPurpose = document.getElementById("loan-purpose");
-  const notes = document.getElementById("notes");
+  const client = document.getElementById("client-name").value;
+  const phone = document.getElementById("client-phone").value;
+  const banker = document.getElementById("banker").value;
+  const loanPurpose = document.getElementById("loan-purpose").value;
+  const notes = document.getElementById("notes").value;
 
-  // Basic validation
-  let valid = true;
-
-  [client, phone, banker, loanPurpose].forEach(el => {
-    el.classList.remove("invalid");
-    if (!el.value.trim() || (el === phone && el.value.replace(/\D/g, "").length !== 10)) {
-      el.classList.add("invalid");
-      valid = false;
-    }
-  });
-
-  if (!valid) {
-    alert("⚠️ Please fill in all required fields correctly.");
+  if (!client || !phone || !banker || !loanPurpose) {
+    alert("Please fill in all required fields.");
     return;
   }
 
   const transfer = {
     agent: username,
-    client: client.value.trim(),
-    phone: phone.value.trim(),
-    banker: banker.value.trim(),
-    loanPurpose: loanPurpose.value.trim(),
-    notes: notes.value.trim(),
+    client,
+    phone,
+    banker,
+    loanPurpose,
+    notes,
     timestamp: new Date().toISOString(),
   };
 
   saveTransferToFirebase(username, selectedDate, transfer);
-  logAuditEntry("Submit Transfer", `Client: ${transfer.client}, Banker: ${transfer.banker}`);
+  logAuditEntry("Submit Transfer", `Client: ${client}, Banker: ${banker}`);
 
-  // Clear fields
-  client.value = "";
-  phone.value = "";
-  banker.value = "";
-  loanPurpose.value = "";
-  notes.value = "";
+
+  document.getElementById("client-name").value = "";
+  document.getElementById("client-phone").value = "";
+  document.getElementById("banker").value = "";
+  document.getElementById("loan-purpose").value = "";
+  document.getElementById("notes").value = "";
 
   renderTransfers();
   updateStats();

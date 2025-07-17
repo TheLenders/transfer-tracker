@@ -145,13 +145,3 @@ select {
 .time-filter select {
   padding: 5px;
 }
-
-input.invalid, select.invalid {
-  border: 2px solid red;
-}
-
-.validation-error {
-  color: red;
-  font-size: 0.8rem;
-  margin-top: 2px;
-}
