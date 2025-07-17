@@ -16,16 +16,7 @@ const firebaseConfig = {
 // ✅ New style initialization
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
-let managerFilterState = "daily";
-// 🚨 Safety Check: Reset if session is corrupted or incomplete
-const validKeys = ["username", "role", "isLoggedIn"];
-const hasAllSessionKeys = validKeys.every(key => localStorage.getItem(key));
-
-if (!hasAllSessionKeys) {
-  console.warn("🧼 Clearing corrupted session data...");
-  localStorage.clear();
-}
- // default to 'daily' on load
+let managerFilterState = "daily"; // default to 'daily' on load
 
 function showDashboard(role) {
   const username = localStorage.getItem("username");
