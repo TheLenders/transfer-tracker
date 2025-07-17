@@ -105,6 +105,13 @@ function saveSettings() {
 
 }
 
+async function hashPassword(password) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+}
 
 // Button listener
 //document.getElementById("save-settings-btn").addEventListener("click", saveSettings);
@@ -269,21 +276,24 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 // === LOGIN ===
 
-document.getElementById("login-btn").addEventListener("click", () => {
+document.getElementById("login-btn").addEventListener("click", async () => {
   const username = document.getElementById("username").value.trim();
   const password = document.getElementById("password").value;
 
-  getUsers(users => {
-  const user = users.find(u => u.username === username && u.password === password);
-  if (!user) return alert("Invalid login.");
+  const hashedInput = await hashPassword(password); // hash typed password
 
-  localStorage.setItem("username", user.username);
-  localStorage.setItem("role", user.role);
-  localStorage.setItem("isLoggedIn", true);
-  logAuditEntry("Login", `Role: ${user.role}`);
-  showDashboard(user.role);
+  getUsers(users => {
+    const user = users.find(u => u.username === username && u.passwordHash === hashedInput);
+    if (!user) return alert("Invalid login.");
+
+    localStorage.setItem("username", user.username);
+    localStorage.setItem("role", user.role);
+    localStorage.setItem("isLoggedIn", true);
+    logAuditEntry("Login", `Role: ${user.role}`);
+    showDashboard(user.role);
+  });
 });
-});
+
 
 
 // === LOGOUTS ===
@@ -393,7 +403,6 @@ document.getElementById("submit-transfer").addEventListener("click", async funct
   };
 
   saveTransferToFirebase(username, selectedDate, transfer);
-  logAuditEntry("Submit Transfer", `Client: ${transfer.client}, Banker: ${transfer.banker}`);
 
   // Clear fields
   client.value = "";
@@ -1095,14 +1104,17 @@ document.getElementById("create-user-btn").addEventListener("click", () => {
 
   if (!username || !password) return alert("Please enter all fields.");
 
-  getUsers(users => {
-    users.push({ username, password, role });
-    saveUsers(users);
-    logAuditEntry("Create Account", `Username: ${username}, Role: ${role}`);
-    alert("User created.");
+  hashPassword(password).then(passwordHash => {
+    getUsers(users => {
+      users.push({ username, passwordHash, role });
+      saveUsers(users);
+      logAuditEntry("Create Account", `Username: ${username}, Role: ${role}`);
+      alert("User created.");
+    });
   });
-}); // ✅ This closes the outer .addEventListener()
-// ✅ <- this closing line was missing before
+}); // ✅ <<< ADD THIS LINE
+
+
 
 
 document.getElementById("reset-pass-btn").addEventListener("click", function () {
@@ -1110,16 +1122,21 @@ document.getElementById("reset-pass-btn").addEventListener("click", function () 
   const newPass = document.getElementById("reset-user-pass").value.trim();
   if (!user || !newPass) return alert("Please enter a new password.");
 
-  getUsers(users => {
-    const u = users.find(u => u.username === user);
-    if (!u) return alert("User not found.");
-    u.password = newPass;
-    saveUsers(users);
-    logAuditEntry("Reset Password", `User: ${user}`);
-    alert("Password reset.");
-    document.getElementById("reset-user-pass").value = "";
+  hashPassword(newPass).then(hash => {
+    getUsers(users => {
+      const u = users.find(u => u.username === user);
+      if (!u) return alert("User not found.");
+
+      u.passwordHash = hash;
+      saveUsers(users);
+      logAuditEntry("Reset Password", `User: ${user}`);
+      alert("Password reset.");
+      document.getElementById("reset-user-pass").value = "";
+    });
   });
 });
+
+
 
 document.getElementById("change-role-btn").addEventListener("click", function () {
   const user = document.getElementById("manage-user-select").value;
