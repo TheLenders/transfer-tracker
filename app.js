@@ -16,6 +16,7 @@ const firebaseConfig = {
 // ✅ New style initialization
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
+let managerFilterState = "daily"; // default to 'daily' on load
 
 function showDashboard(role) {
   const username = localStorage.getItem("username");
@@ -147,10 +148,14 @@ function saveCallsToFirebase(username, date, callCount) {
 }
 
 function populateScorecardDropdown() {
-  document.getElementById("scorecard-select").addEventListener("change", function () {
-  renderAgentScorecard(this.value);
-});
-  const dropdown = document.getElementById("scorecard-select");
+  const selectEl = document.getElementById("scorecard-select");
+  if (!selectEl) return; // 🛑 Prevent the error
+
+  selectEl.addEventListener("change", function () {
+    renderAgentScorecard(this.value);
+  });
+
+  const dropdown = selectEl;
   dropdown.innerHTML = "";
 
   const usersRef = ref(db, "users");
@@ -172,6 +177,7 @@ function populateScorecardDropdown() {
     }
   });
 }
+
 
 
 
@@ -396,6 +402,32 @@ document.getElementById("submit-calls").addEventListener("click", function () {
   }
 });
 
+function getDateRange(filterType) {
+  const today = new Date();
+  let start, end;
+
+  if (filterType === "daily") {
+    start = end = today.toISOString().split("T")[0];
+  } else if (filterType === "weekly") {
+    const day = today.getDay(); // 0 (Sun) - 6 (Sat)
+    const diffToMonday = day === 0 ? 6 : day - 1;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - diffToMonday);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    start = monday.toISOString().split("T")[0];
+    end = sunday.toISOString().split("T")[0];
+  } else if (filterType === "monthly") {
+    const first = new Date(today.getFullYear(), today.getMonth(), 1);
+    const last = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    start = first.toISOString().split("T")[0];
+    end = last.toISOString().split("T")[0];
+  }
+
+  return { start, end };
+}
+
+
 function getToday() {
   return new Date().toISOString().split("T")[0];
 }
@@ -604,7 +636,7 @@ function renderManagerLeaderboard() {
 
 
 function renderManagerSummary() {
-  const today = new Date().toISOString().slice(0, 10);
+  const { start, end } = getDateRange(managerFilterState);
   const usersRef = ref(db, "users");
 
   get(usersRef).then(snapshot => {
@@ -617,14 +649,27 @@ function renderManagerSummary() {
 
     users.forEach(user => {
       const username = user.username;
-      const transferRef = ref(db, `transfers/${username}/${today}`);
-      const callsRef = ref(db, `calls/${username}/${today}`);
 
-      Promise.all([get(transferRef), get(callsRef)]).then(([tSnap, cSnap]) => {
-        const transfers = tSnap.exists() ? tSnap.val().length : 0;
-        const calls = cSnap.exists() ? cSnap.val() : 0;
+      const transferPromises = [];
+      const callPromises = [];
 
-        totalTransfers += transfers;
+      let date = new Date(start);
+      const endDate = new Date(end);
+
+      while (date <= endDate) {
+        const dateStr = date.toISOString().split("T")[0];
+        transferPromises.push(get(ref(db, `transfers/${username}/${dateStr}`)));
+        callPromises.push(get(ref(db, `calls/${username}/${dateStr}`)));
+        date.setDate(date.getDate() + 1);
+      }
+
+      Promise.all([...transferPromises, ...callPromises]).then(results => {
+        const transfers = results.slice(0, transferPromises.length).flatMap(snap => snap.exists() ? snap.val() : []);
+        const calls = results.slice(transferPromises.length).reduce((sum, snap) => {
+          return sum + (snap.exists() ? snap.val() : 0);
+        }, 0);
+
+        totalTransfers += transfers.length;
         totalCalls += calls;
 
         completed++;
@@ -634,8 +679,6 @@ function renderManagerSummary() {
           document.getElementById("total-calls").textContent = totalCalls;
           document.getElementById("avg-conversion").textContent = avgConv;
         }
-      }).catch(err => {
-        console.error("❌ Error fetching summary data:", err);
       });
     });
   });
@@ -1100,3 +1143,173 @@ document.getElementById("chatbot-send").addEventListener("click", () => {
   messages.scrollTop = messages.scrollHeight;
 });
 
+document.getElementById("agent-time-view").addEventListener("change", function () {
+  const filter = this.value;
+  renderAgentDashboardView(filter);
+});
+
+document.getElementById("manager-time-view").addEventListener("change", function () {
+  const filter = this.value;
+  renderManagerDashboardView(filter);
+});
+
+function renderAgentDashboardView(filter) {
+  const username = localStorage.getItem("username");
+  const { start, end } = getDateRange(filter);
+
+  const transferPromises = [];
+  const callPromises = [];
+
+  let date = new Date(start);
+  const endDate = new Date(end);
+
+  while (date <= endDate) {
+    const dateStr = date.toISOString().split("T")[0];
+    transferPromises.push(get(ref(db, `transfers/${username}/${dateStr}`)));
+    callPromises.push(get(ref(db, `calls/${username}/${dateStr}`)));
+    date.setDate(date.getDate() + 1);
+  }
+
+  Promise.all([...transferPromises, ...callPromises]).then(results => {
+    const transfers = results.slice(0, transferPromises.length).flatMap(snap => snap.exists() ? snap.val() : []);
+    const calls = results.slice(transferPromises.length).reduce((sum, snap) => {
+      return sum + (snap.exists() ? snap.val() : 0);
+    }, 0);
+
+    const conversion = calls > 0 ? ((transfers.length / calls) * 100).toFixed(1) + "%" : "0%";
+    const badge = transfers.length >= 5 ? "🏅" : "";
+
+    document.getElementById("transfer-count").textContent = transfers.length;
+    document.getElementById("dial-count").textContent = calls;
+    document.getElementById("conversion-rate").textContent = conversion;
+
+    const leaderboardBadge = document.querySelector("#leaderboard-body td:last-child");
+    if (leaderboardBadge) leaderboardBadge.textContent = badge;
+  }).catch(err => {
+    console.error("❌ Agent view error:", err);
+  });
+}
+
+function renderManagerDashboardView(filter) {
+  console.log("🔄 Manager view changed:", filter);
+
+  const { start, end } = getDateRange(filter);
+
+  renderManagerSummaryFiltered(start, end);
+  renderManagerLeaderboardFiltered(start, end);
+}
+
+function renderManagerSummaryFiltered(startDate, endDate) {
+  const usersRef = ref(db, "users");
+
+  get(usersRef).then(snapshot => {
+    if (!snapshot.exists()) return;
+
+    const agents = snapshot.val().filter(u => u.role === "agent");
+
+    let totalTransfers = 0;
+    let totalCalls = 0;
+    let completed = 0;
+
+    agents.forEach(agent => {
+      const username = agent.username;
+      let transferCount = 0;
+      let callCount = 0;
+
+      const days = getDateRangeDays(startDate, endDate);
+      let dayPromises = days.map(date => {
+        const tRef = ref(db, `transfers/${username}/${date}`);
+        const cRef = ref(db, `calls/${username}/${date}`);
+
+        return Promise.all([get(tRef), get(cRef)]).then(([tSnap, cSnap]) => {
+          if (tSnap.exists()) transferCount += tSnap.val().length;
+          if (cSnap.exists()) callCount += cSnap.val();
+        });
+      });
+
+      Promise.all(dayPromises).then(() => {
+        totalTransfers += transferCount;
+        totalCalls += callCount;
+
+        completed++;
+        if (completed === agents.length) {
+          const conv = totalCalls > 0 ? ((totalTransfers / totalCalls) * 100).toFixed(1) + "%" : "0%";
+          document.getElementById("total-transfers").textContent = totalTransfers;
+          document.getElementById("total-calls").textContent = totalCalls;
+          document.getElementById("avg-conversion").textContent = conv;
+        }
+      });
+    });
+  });
+}
+
+function renderManagerLeaderboardFiltered(startDate, endDate) {
+  const usersRef = ref(db, "users");
+
+  get(usersRef).then(snapshot => {
+    if (!snapshot.exists()) return;
+
+    const agents = snapshot.val().filter(u => u.role === "agent");
+    const leaderboard = [];
+
+    let completed = 0;
+
+    agents.forEach(agent => {
+      const username = agent.username;
+      let transferCount = 0;
+      let callCount = 0;
+
+      const days = getDateRangeDays(startDate, endDate);
+      let dayPromises = days.map(date => {
+        const tRef = ref(db, `transfers/${username}/${date}`);
+        const cRef = ref(db, `calls/${username}/${date}`);
+
+        return Promise.all([get(tRef), get(cRef)]).then(([tSnap, cSnap]) => {
+          if (tSnap.exists()) transferCount += tSnap.val().length;
+          if (cSnap.exists()) callCount += cSnap.val();
+        });
+      });
+
+      Promise.all(dayPromises).then(() => {
+        const conversion = callCount > 0 ? ((transferCount / callCount) * 100).toFixed(1) + "%" : "0%";
+        leaderboard.push({
+          username,
+          transfers: transferCount,
+          calls: callCount,
+          conv: conversion
+        });
+
+        completed++;
+        if (completed === agents.length) {
+          leaderboard.sort((a, b) => b.transfers - a.transfers);
+
+          const tbody = document.getElementById("manager-leaderboard");
+          tbody.innerHTML = "";
+          leaderboard.forEach((a, i) => {
+            const row = document.createElement("tr");
+            row.innerHTML = `
+              <td>${i + 1}</td>
+              <td>${a.username}</td>
+              <td>${a.transfers}</td>
+              <td>${a.calls}</td>
+              <td>${a.conv}</td>
+            `;
+            tbody.appendChild(row);
+          });
+        }
+      });
+    });
+  });
+}
+
+function getDateRangeDays(start, end) {
+  const result = [];
+  const date = new Date(start);
+
+  while (date <= new Date(end)) {
+    result.push(date.toISOString().slice(0, 10));
+    date.setDate(date.getDate() + 1);
+  }
+
+  return result;
+}
