@@ -778,13 +778,6 @@ set(ref(db, `calls/${agent}/${today}`), newDials).then(() => {
   alert("❌ Failed to update calls. Try again.");
 });
 
-
-
-  document.getElementById("override-dials").value = "";
-  renderManagerLeaderboard();
-  renderManagerSummary();
-  alert("Call count updated.");
-  
 });
 
 function populateOverrideDropdown() {
