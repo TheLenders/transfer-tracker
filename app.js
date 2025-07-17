@@ -150,7 +150,6 @@ function saveTransferToFirebase(username, date, transfer) {
   renderTransfers();
   updateStats();
   renderLeaderboard();
-  alert("✅ Transfer submitted successfully.");
 }).catch(error => {
   console.error("❌ Error saving transfer to Firebase:", error);
   alert("❌ Transfer failed to save. Try again.");
@@ -195,8 +194,10 @@ function populateScorecardDropdown() {
     });
 
     if (users.length > 0) {
-      renderAgentScorecard(users[0].username); // default to first
-    }
+  const first = users.find(u => u.role === "agent");
+  dropdown.value = first.username; // visually selects in UI
+  renderAgentScorecard(first.username); // loads data
+}
   });
 }
 
@@ -473,11 +474,11 @@ function getToday() {
 // === RENDER TRANSFERS ===
 function renderTransfers() {
   const username = localStorage.getItem("username");
-  const today = getToday();
+  const selectedDate = document.getElementById("transfer-date").value || getToday();
   const transferList = document.getElementById("transfer-list");
   transferList.innerHTML = "";
 
-  const transferRef = ref(db, `transfers/${username}/${today}`);
+  const transferRef = ref(db, `transfers/${username}/${selectedDate}`);
   get(transferRef).then(snapshot => {
     const transfers = snapshot.exists() ? snapshot.val() : [];
 
@@ -612,66 +613,64 @@ function getDateRangeData(username, startDate, endDate) {
   });
 }
 
-function renderManagerLeaderboard() {
-  const today = new Date().toISOString().slice(0, 10);
+function renderManagerLeaderboardFiltered(startDate, endDate) {
   const usersRef = ref(db, "users");
 
   get(usersRef).then(snapshot => {
     if (!snapshot.exists()) return;
 
-    const users = snapshot.val().filter(u => u.role === "agent");
-    const rows = [];
-    let completed = 0;
+    const agents = snapshot.val().filter(u => u.role === "agent");
+    const leaderboard = [];
 
-    users.forEach(user => {
-      const username = user.username;
-      const transferRef = ref(db, `transfers/${username}/${today}`);
-      const callsRef = ref(db, `calls/${username}/${today}`);
+    // Create array of promises
+    const allAgentPromises = agents.map(agent => {
+      const username = agent.username;
+      let transferCount = 0;
+      let callCount = 0;
 
-      Promise.all([get(transferRef), get(callsRef)]).then(([tSnap, cSnap]) => {
-        const transfers = tSnap.exists() ? tSnap.val() : [];
-        const calls = cSnap.exists() ? cSnap.val() : 0;
-        const conv = calls > 0 ? ((transfers.length / calls) * 100).toFixed(1) + "%" : "0%";
+      const days = getDateRangeDays(startDate, endDate);
 
-        rows.push({
-          name: username,
-          transfers: transfers.length,
-          dials: calls,
-          conv
+      const dayPromises = days.map(date => {
+        const tRef = ref(db, `transfers/${username}/${date}`);
+        const cRef = ref(db, `calls/${username}/${date}`);
+        return Promise.all([get(tRef), get(cRef)]).then(([tSnap, cSnap]) => {
+          if (tSnap.exists()) transferCount += tSnap.val().length;
+          if (cSnap.exists()) callCount += cSnap.val();
         });
+      });
 
-        completed++;
-        if (completed === users.length) {
-          // Sort and render
-          rows.sort((a, b) => b.transfers - a.transfers);
-
-          const tbody = document.getElementById("manager-leaderboard");
-          tbody.innerHTML = "";
-
-          rows.forEach((agent, i) => {
-            const row = document.createElement("tr");
-            row.innerHTML = `
-              <td>${i + 1}</td>
-              <td>${agent.name}</td>
-              <td>${agent.transfers}</td>
-              <td>${agent.dials}</td>
-              <td>${agent.conv}</td>
-            `;
-            tbody.appendChild(row);
-          });
-        }
-      }).catch(err => {
-        console.error(`Error fetching data for ${username}:`, err);
-        completed++;
+      return Promise.all(dayPromises).then(() => {
+        const conversion = callCount > 0 ? ((transferCount / callCount) * 100).toFixed(1) + "%" : "0%";
+        leaderboard.push({
+          username,
+          transfers: transferCount,
+          calls: callCount,
+          conv: conversion
+        });
       });
     });
-  }).catch(err => {
-    console.error("❌ Failed to load users:", err);
+
+    // Once all agents are processed, render table
+    Promise.all(allAgentPromises).then(() => {
+      leaderboard.sort((a, b) => b.transfers - a.transfers);
+
+      const tbody = document.getElementById("manager-leaderboard");
+      tbody.innerHTML = "";
+
+      leaderboard.forEach((a, i) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${i + 1}</td>
+          <td>${a.username}</td>
+          <td>${a.transfers}</td>
+          <td>${a.calls}</td>
+          <td>${a.conv}</td>
+        `;
+        tbody.appendChild(row);
+      });
+    });
   });
 }
-
-
-
 
 function renderManagerSummary() {
   const { start, end } = getDateRange(managerFilterState);
@@ -817,7 +816,11 @@ document.getElementById("request-backdate-btn").addEventListener("click", () => 
   const selectedDate = document.getElementById("transfer-date").value;
   const reason = prompt("Why are you requesting to backdate this transfer?");
 
-  if (!selectedDate || !reason) return alert("Please provide a date and reason.");
+  if (!selectedDate || !reason || reason.trim() === "") {
+  alert("⚠️ Please provide a valid reason for your backdate request.");
+  return;
+}
+
 
   const timestamp = Date.now();
   const request = {
@@ -1060,7 +1063,7 @@ function renderAuditLog() {
   get(auditRef).then(snapshot => {
     if (!snapshot.exists()) return;
     const log = snapshot.val();
-    const entries = Object.values(log).sort((a, b) => new Date(b.time) - new Date(a.time));
+    const entries = Object.values(log).sort((a, b) => b.timestamp - a.timestamp);
 
     table.innerHTML = ""; // Clear existing
     entries.forEach(entry => {
