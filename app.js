@@ -16,55 +16,35 @@ const firebaseConfig = {
 // ✅ New style initialization
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
-let managerFilterState = "daily";
-// 🚨 Safety Check: Reset if session is corrupted or incomplete
-const validKeys = ["username", "role", "isLoggedIn"];
-const hasAllSessionKeys = validKeys.every(key => localStorage.getItem(key));
-
-if (!hasAllSessionKeys) {
-  console.warn("🧼 Clearing corrupted session data...");
-  localStorage.clear();
-}
- // default to 'daily' on load
 
 function showDashboard(role) {
   const username = localStorage.getItem("username");
-  const dashboardAgent = document.getElementById("agent-dashboard");
-  const dashboardManager = document.getElementById("manager-dashboard");
 
-  getUsers(users => {
-    const user = users.find(u => u.username === username);
+  document.getElementById("login-container").style.display = "none";
 
-    if (!user) {
-      alert("Invalid session. Logging out.");
-      localStorage.clear();
-      location.reload();
-      return;
-    }
+  if (role === "agent") {
+    document.getElementById("agent-dashboard").style.display = "block";
+    document.getElementById("agent-name").textContent = username;
+    document.getElementById("dial-count").textContent = localStorage.getItem("dialCount") || "0";
+    document.getElementById("transfer-date").value = new Date().toISOString().slice(0, 10);
 
-    if (user.role !== role) {
-      console.warn("🚨 Role mismatch. Local role:", role, "Real role:", user.role);
-      alert("Session mismatch. Logging out for security.");
-      localStorage.clear();
-      location.reload();
-      return;
-    }
+    renderTransfers();
+    updateStats();
+    renderLeaderboard();
+  }
 
-    document.getElementById("login-container").style.display = "none";
+  if (role === "manager") {
+    document.getElementById("manager-dashboard").style.display = "block";
 
-    if (user.role === "agent") {
-      dashboardAgent.style.display = "block";
-      document.getElementById("agent-name").textContent = username;
-      document.getElementById("dial-count").textContent = localStorage.getItem("dialCount") || "0";
-      document.getElementById("transfer-date").value = new Date().toISOString().slice(0, 10);
-
-      renderTransfers();
-      updateStats();
-      renderLeaderboard();
-    }
-
-    if (user.role === "manager") {
-      dashboardManager.style.display = "block";
+    // Redundant double-check
+    getUsers(users => {
+      const user = users.find(u => u.username === username);
+      if (!user || user.role !== "manager") {
+        alert("Unauthorized access attempt. Logging out.");
+        localStorage.clear();
+        location.reload();
+        return;
+      }
 
       renderManagerLeaderboard();
       renderManagerSummary();
@@ -77,10 +57,9 @@ function showDashboard(role) {
       syncAuditToLocalStorage();
       loadSettings();
       populateScorecardDropdown();
-    }
-  });
+    });
+  }
 }
-
 
 // Load settings from Firebase and populate inputs
 function loadSettings() {
@@ -105,13 +84,11 @@ function saveSettings() {
   };
 
   set(settingsRef, newSettings).then(() => {
-  logAuditEntry("Update Settings", JSON.stringify(newSettings));
-  alert("✅ Settings saved!");
-}).catch(err => {
-  console.error("❌ Error saving settings:", err);
-  alert("❌ Failed to save settings.");
-});
-
+    logAuditEntry("Update Settings", JSON.stringify(newSettings));
+    alert("Settings saved!");
+  }).catch(err => {
+    console.error("❌ Error saving settings:", err);
+  });
 }
 
 
@@ -142,28 +119,26 @@ function saveUsers(users) {
 }
 
 function saveTransferToFirebase(username, date, transfer) {
-  const transferRef = ref(db, `transfers/${username}/${date}`);
+  const transferRef = ref(db, transfers/${username}/${date});
 
   get(transferRef).then(snapshot => {
     const current = snapshot.exists() ? snapshot.val() : [];
     current.push(transfer);
-    set(transferRef, current).then(() => {
-  logAuditEntry("Submit Transfer", `Client: ${transfer.client}, Banker: ${transfer.banker}`);
-  renderTransfers();
-  updateStats();
-  renderLeaderboard();
-  alert("✅ Transfer submitted successfully.");
-}).catch(error => {
-  console.error("❌ Error saving transfer to Firebase:", error);
-  alert("❌ Transfer failed to save. Try again.");
-});
-  }); // <-- Added closing bracket for saveTransferToFirebase
+    set(transferRef, current);
+  }).then(() => {
+    logAuditEntry("Submit Transfer", Client: ${transfer.client}, Banker: ${transfer.banker});
+    renderTransfers();
+    updateStats();
+    renderLeaderboard();
+  }).catch(error => {
+    console.error("❌ Error saving transfer to Firebase:", error);
+  });
 }
 
 function saveCallsToFirebase(username, date, callCount) {
-  const callsRef = ref(db, `calls/${username}/${date}`);
+  const callsRef = ref(db, calls/${username}/${date});
   set(callsRef, callCount).then(() => {
-    logAuditEntry("Update Call Count", `Count: ${callCount}`);
+    logAuditEntry("Update Call Count", Count: ${callCount});
     updateStats(); // Refresh dashboard
     renderLeaderboard();
   }).catch(err => {
@@ -172,14 +147,10 @@ function saveCallsToFirebase(username, date, callCount) {
 }
 
 function populateScorecardDropdown() {
-  const selectEl = document.getElementById("scorecard-select");
-  if (!selectEl) return; // 🛑 Prevent the error
-
-  selectEl.addEventListener("change", function () {
-    renderAgentScorecard(this.value);
-  });
-
-  const dropdown = selectEl;
+  document.getElementById("scorecard-select").addEventListener("change", function () {
+  renderAgentScorecard(this.value);
+});
+  const dropdown = document.getElementById("scorecard-select");
   dropdown.innerHTML = "";
 
   const usersRef = ref(db, "users");
@@ -204,13 +175,12 @@ function populateScorecardDropdown() {
 
 
 
-
 function renderAgentScorecard(agentName) {
   const today = getToday();
   const badgeThreshold = parseInt(document.getElementById("setting-badge-threshold").value) || 5;
 
-  const transfersRef = ref(db, `transfers/${agentName}/${today}`);
-  const callsRef = ref(db, `calls/${agentName}/${today}`);
+  const transfersRef = ref(db, transfers/${agentName}/${today});
+  const callsRef = ref(db, calls/${agentName}/${today});
 
   Promise.all([get(transfersRef), get(callsRef)]).then(([tSnap, cSnap]) => {
     const transfers = tSnap.exists() ? tSnap.val() : [];
@@ -234,48 +204,15 @@ function renderAgentScorecard(agentName) {
     tbody.innerHTML = "";
     for (let hour = 9; hour <= 17; hour++) {
       const row = document.createElement("tr");
-      row.innerHTML = `
+      row.innerHTML = 
         <td>${hour}:00 – ${hour + 1}:00</td>
         <td>${hourlyCounts[hour]}</td>
-      `;
+      ;
       tbody.appendChild(row);
     }
   });
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  const toggle = document.getElementById("chatbot-toggle");
-  if (toggle) {
-    toggle.addEventListener("click", () => {
-      document.getElementById("chatbot-container").style.display = "block";
-      toggle.style.display = "none";
-    });
-
-    document.getElementById("chatbot-close").addEventListener("click", () => {
-      document.getElementById("chatbot-container").style.display = "none";
-      toggle.style.display = "block";
-    });
-
-    document.getElementById("chatbot-send").addEventListener("click", () => {
-      const input = document.getElementById("chatbot-input");
-      const messages = document.getElementById("chatbot-messages");
-
-      const userMessage = input.value.trim();
-      if (!userMessage) return;
-
-      const userBubble = document.createElement("div");
-      userBubble.textContent = "🧑 " + userMessage;
-      messages.appendChild(userBubble);
-      input.value = "";
-
-      const botBubble = document.createElement("div");
-      botBubble.textContent = "🤖 Let me think...";
-      messages.appendChild(botBubble);
-
-      messages.scrollTop = messages.scrollHeight;
-    });
-  }
-});
 // === LOGIN ===
 
 document.getElementById("login-btn").addEventListener("click", () => {
@@ -289,7 +226,7 @@ document.getElementById("login-btn").addEventListener("click", () => {
   localStorage.setItem("username", user.username);
   localStorage.setItem("role", user.role);
   localStorage.setItem("isLoggedIn", true);
-  logAuditEntry("Login", `Role: ${user.role}`);
+  logAuditEntry("Login", Role: ${user.role});
   showDashboard(user.role);
 });
 });
@@ -367,47 +304,36 @@ document.getElementById("submit-transfer").addEventListener("click", function ()
     }
   }
 
-  const client = document.getElementById("client-name");
-  const phone = document.getElementById("client-phone");
-  const banker = document.getElementById("banker");
-  const loanPurpose = document.getElementById("loan-purpose");
-  const notes = document.getElementById("notes");
+  const client = document.getElementById("client-name").value;
+  const phone = document.getElementById("client-phone").value;
+  const banker = document.getElementById("banker").value;
+  const loanPurpose = document.getElementById("loan-purpose").value;
+  const notes = document.getElementById("notes").value;
 
-  // Basic validation
-  let valid = true;
-
-  [client, phone, banker, loanPurpose].forEach(el => {
-    el.classList.remove("invalid");
-    if (!el.value.trim() || (el === phone && el.value.replace(/\D/g, "").length !== 10)) {
-      el.classList.add("invalid");
-      valid = false;
-    }
-  });
-
-  if (!valid) {
-    alert("⚠️ Please fill in all required fields correctly.");
+  if (!client || !phone || !banker || !loanPurpose) {
+    alert("Please fill in all required fields.");
     return;
   }
 
   const transfer = {
     agent: username,
-    client: client.value.trim(),
-    phone: phone.value.trim(),
-    banker: banker.value.trim(),
-    loanPurpose: loanPurpose.value.trim(),
-    notes: notes.value.trim(),
+    client,
+    phone,
+    banker,
+    loanPurpose,
+    notes,
     timestamp: new Date().toISOString(),
   };
 
   saveTransferToFirebase(username, selectedDate, transfer);
-  logAuditEntry("Submit Transfer", `Client: ${transfer.client}, Banker: ${transfer.banker}`);
+  logAuditEntry("Submit Transfer", Client: ${client}, Banker: ${banker});
 
-  // Clear fields
-  client.value = "";
-  phone.value = "";
-  banker.value = "";
-  loanPurpose.value = "";
-  notes.value = "";
+
+  document.getElementById("client-name").value = "";
+  document.getElementById("client-phone").value = "";
+  document.getElementById("banker").value = "";
+  document.getElementById("loan-purpose").value = "";
+  document.getElementById("notes").value = "";
 
   renderTransfers();
   updateStats();
@@ -421,47 +347,21 @@ document.getElementById("submit-calls").addEventListener("click", function () {
     const today = getToday();
     const username = localStorage.getItem("username");
 
-    const callsRef = ref(db, `calls/${username}/${today}`);
+    // 🔥 Save to Firebase
+    const callsRef = ref(db, calls/${username}/${today});
     set(callsRef, calls).then(() => {
-      logAuditEntry("Update Call Count", `Count: ${calls}`);
+      logAuditEntry("Update Call Count", Count: ${calls});
       document.getElementById("dial-count").textContent = calls;
       updateStats();
       renderLeaderboard();
-      alert("✅ Call count saved!");
     }).catch(error => {
       console.error("❌ Error saving calls to Firebase:", error);
-      alert("❌ Failed to save call count. Try again.");
+      alert("Error saving call count. Try again.");
     });
   } else {
-    alert("⚠️ Please enter a valid number of calls.");
+    alert("Please enter a valid number of calls.");
   }
 });
-
-function getDateRange(filterType) {
-  const today = new Date();
-  let start, end;
-
-  if (filterType === "daily") {
-    start = end = today.toISOString().split("T")[0];
-  } else if (filterType === "weekly") {
-    const day = today.getDay(); // 0 (Sun) - 6 (Sat)
-    const diffToMonday = day === 0 ? 6 : day - 1;
-    const monday = new Date(today);
-    monday.setDate(today.getDate() - diffToMonday);
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    start = monday.toISOString().split("T")[0];
-    end = sunday.toISOString().split("T")[0];
-  } else if (filterType === "monthly") {
-    const first = new Date(today.getFullYear(), today.getMonth(), 1);
-    const last = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-    start = first.toISOString().split("T")[0];
-    end = last.toISOString().split("T")[0];
-  }
-
-  return { start, end };
-}
-
 
 function getToday() {
   return new Date().toISOString().split("T")[0];
@@ -474,13 +374,13 @@ function renderTransfers() {
   const transferList = document.getElementById("transfer-list");
   transferList.innerHTML = "";
 
-  const transferRef = ref(db, `transfers/${username}/${today}`);
+  const transferRef = ref(db, transfers/${username}/${today});
   get(transferRef).then(snapshot => {
     const transfers = snapshot.exists() ? snapshot.val() : [];
 
     transfers.forEach(t => {
       const li = document.createElement("li");
-      li.textContent = `${t.client} – ${t.phone} → ${t.banker} (${t.loanPurpose})`;
+      li.textContent = ${t.client} – ${t.phone} → ${t.banker} (${t.loanPurpose});
       transferList.appendChild(li);
     });
 
@@ -495,7 +395,7 @@ document.getElementById("client-phone").addEventListener("keydown", function (e)
   if (e.key === "Enter") {
     const raw = this.value.replace(/\D/g, ""); // remove all non-digits
     if (raw.length === 10) {
-      const formatted = `(${raw.slice(0,3)}) ${raw.slice(3,6)}-${raw.slice(6)}`;
+      const formatted = (${raw.slice(0,3)}) ${raw.slice(3,6)}-${raw.slice(6)};
       this.value = formatted;
     }
   }
@@ -505,7 +405,7 @@ document.getElementById("client-phone").addEventListener("keydown", function (e)
 function updateStats(transferCount) {
   const username = localStorage.getItem("username");
   const today = getToday();
-  const callsRef = ref(db, `calls/${username}/${today}`);
+  const callsRef = ref(db, calls/${username}/${today});
 
   get(callsRef).then(snapshot => {
     const dialCount = snapshot.exists() ? snapshot.val() : 0;
@@ -523,8 +423,9 @@ function updateStats(transferCount) {
 function renderLeaderboard() {
   const today = getToday();
   const leaderboardBody = document.getElementById("leaderboard-body");
-  if (!leaderboardBody) return;
-  leaderboardBody.innerHTML = "";
+  const managerTable = document.getElementById("manager-leaderboard");
+  if (leaderboardBody) leaderboardBody.innerHTML = "";
+  if (managerTable) managerTable.innerHTML = "";
 
   const usersRef = ref(db, "users");
 
@@ -534,11 +435,12 @@ function renderLeaderboard() {
     const users = snapshot.val();
     const rows = [];
 
+    // Loop through each user
     for (const user of users) {
       if (user.role !== "agent") continue;
 
-      const transferRef = ref(db, `transfers/${user.username}/${today}`);
-      const callsRef = ref(db, `calls/${user.username}/${today}`);
+      const transferRef = ref(db, transfers/${user.username}/${today});
+      const callsRef = ref(db, calls/${user.username}/${today});
 
       Promise.all([get(transferRef), get(callsRef)]).then(([tSnap, cSnap]) => {
         const transfers = tSnap.exists() ? tSnap.val() : [];
@@ -554,19 +456,21 @@ function renderLeaderboard() {
           badge
         });
 
+        // Wait for all rows before rendering
         if (rows.length === users.filter(u => u.role === "agent").length) {
           rows.sort((a, b) => b.transfers - a.transfers);
           rows.forEach((row, i) => {
-            const html = `
+            const html = 
               <tr>
                 <td>${i + 1}</td>
                 <td>${row.username}</td>
                 <td>${row.transfers}</td>
                 <td>${row.calls}</td>
                 <td>${row.conversion}</td>
-                <td>${row.badge}</td>
-              </tr>`;
-            leaderboardBody.innerHTML += html;
+                ${leaderboardBody ? <td>${row.badge}</td> : ""}
+              </tr>;
+            if (leaderboardBody) leaderboardBody.innerHTML += html;
+            if (managerTable) managerTable.innerHTML += html;
           });
         }
       });
@@ -576,38 +480,7 @@ function renderLeaderboard() {
   });
 }
 
-
 // === MANAGER FUNCTIONS ===
-function getDateRangeData(username, startDate, endDate) {
-  return new Promise((resolve) => {
-    const current = new Date(startDate);
-    const end = new Date(endDate);
-    const results = [];
-
-    const checkNext = () => {
-      if (current > end) {
-        resolve(results.flat());
-        return;
-      }
-
-      const dateStr = current.toISOString().slice(0, 10);
-      const refPath = ref(db, `transfers/${username}/${dateStr}`);
-
-      get(refPath).then(snap => {
-        const transfers = snap.exists() ? snap.val() : [];
-        results.push(transfers);
-        current.setDate(current.getDate() + 1);
-        checkNext();
-      }).catch(err => {
-        console.error(`❌ Error fetching ${dateStr} for ${username}:`, err);
-        current.setDate(current.getDate() + 1);
-        checkNext();
-      });
-    };
-
-    checkNext();
-  });
-}
 
 function renderManagerLeaderboard() {
   const today = new Date().toISOString().slice(0, 10);
@@ -622,8 +495,8 @@ function renderManagerLeaderboard() {
 
     users.forEach(user => {
       const username = user.username;
-      const transferRef = ref(db, `transfers/${username}/${today}`);
-      const callsRef = ref(db, `calls/${username}/${today}`);
+      const transferRef = ref(db, transfers/${username}/${today});
+      const callsRef = ref(db, calls/${username}/${today});
 
       Promise.all([get(transferRef), get(callsRef)]).then(([tSnap, cSnap]) => {
         const transfers = tSnap.exists() ? tSnap.val() : [];
@@ -639,26 +512,25 @@ function renderManagerLeaderboard() {
 
         completed++;
         if (completed === users.length) {
-          // Sort and render
+          // All data fetched, render
           rows.sort((a, b) => b.transfers - a.transfers);
 
           const tbody = document.getElementById("manager-leaderboard");
           tbody.innerHTML = "";
-
           rows.forEach((agent, i) => {
             const row = document.createElement("tr");
-            row.innerHTML = `
+            row.innerHTML = 
               <td>${i + 1}</td>
               <td>${agent.name}</td>
               <td>${agent.transfers}</td>
               <td>${agent.dials}</td>
               <td>${agent.conv}</td>
-            `;
+            ;
             tbody.appendChild(row);
           });
         }
       }).catch(err => {
-        console.error(`Error fetching data for ${username}:`, err);
+        console.error(Error fetching data for ${username}:, err);
         completed++;
       });
     });
@@ -668,10 +540,8 @@ function renderManagerLeaderboard() {
 }
 
 
-
-
 function renderManagerSummary() {
-  const { start, end } = getDateRange(managerFilterState);
+  const today = new Date().toISOString().slice(0, 10);
   const usersRef = ref(db, "users");
 
   get(usersRef).then(snapshot => {
@@ -684,27 +554,14 @@ function renderManagerSummary() {
 
     users.forEach(user => {
       const username = user.username;
+      const transferRef = ref(db, transfers/${username}/${today});
+      const callsRef = ref(db, calls/${username}/${today});
 
-      const transferPromises = [];
-      const callPromises = [];
+      Promise.all([get(transferRef), get(callsRef)]).then(([tSnap, cSnap]) => {
+        const transfers = tSnap.exists() ? tSnap.val().length : 0;
+        const calls = cSnap.exists() ? cSnap.val() : 0;
 
-      let date = new Date(start);
-      const endDate = new Date(end);
-
-      while (date <= endDate) {
-        const dateStr = date.toISOString().split("T")[0];
-        transferPromises.push(get(ref(db, `transfers/${username}/${dateStr}`)));
-        callPromises.push(get(ref(db, `calls/${username}/${dateStr}`)));
-        date.setDate(date.getDate() + 1);
-      }
-
-      Promise.all([...transferPromises, ...callPromises]).then(results => {
-        const transfers = results.slice(0, transferPromises.length).flatMap(snap => snap.exists() ? snap.val() : []);
-        const calls = results.slice(transferPromises.length).reduce((sum, snap) => {
-          return sum + (snap.exists() ? snap.val() : 0);
-        }, 0);
-
-        totalTransfers += transfers.length;
+        totalTransfers += transfers;
         totalCalls += calls;
 
         completed++;
@@ -714,6 +571,8 @@ function renderManagerSummary() {
           document.getElementById("total-calls").textContent = totalCalls;
           document.getElementById("avg-conversion").textContent = avgConv;
         }
+      }).catch(err => {
+        console.error("❌ Error fetching summary data:", err);
       });
     });
   });
@@ -732,7 +591,7 @@ function getTransferCountsByHour(callback) {
     let completed = 0;
 
     agents.forEach(agent => {
-      const refPath = ref(db, `transfers/${agent.username}/${today}`);
+      const refPath = ref(db, transfers/${agent.username}/${today});
       get(refPath).then(tSnap => {
         const transfers = tSnap.exists() ? tSnap.val() : [];
 
@@ -748,7 +607,7 @@ function getTransferCountsByHour(callback) {
           callback(hourlyCounts);
         }
       }).catch(err => {
-        console.error(`❌ Error loading transfers for ${agent.username}:`, err);
+        console.error(❌ Error loading transfers for ${agent.username}:, err);
         completed++;
         if (completed === agents.length) {
           callback(hourlyCounts);
@@ -772,18 +631,10 @@ document.getElementById("override-save-btn").addEventListener("click", function 
   if (!agent || isNaN(newDials)) return alert("Invalid input");
 
   const today = new Date().toISOString().slice(0, 10);
-  const callsRef = ref(db, `calls/${agent}/${today}`);
-set(ref(db, `calls/${agent}/${today}`), newDials).then(() => {
-  logAuditEntry("Override Dials", `Agent: ${agent}, Dials set to: ${newDials}`);
-  document.getElementById("override-dials").value = "";
-  renderManagerLeaderboard();
-  renderManagerSummary();
-  alert("✅ Call count updated.");
-}).catch(err => {
-  console.error("❌ Error overriding dials:", err);
-  alert("❌ Failed to update calls. Try again.");
-});
-
+  let dialData = JSON.parse(localStorage.getItem("allDialCounts")) || {};
+  dialData[agent + "_" + today] = newDials;
+  localStorage.setItem("allDialCounts", JSON.stringify(dialData));
+  logAuditEntry("Override Dials", Agent: ${agent}, Dials set to: ${newDials});
 
 
   document.getElementById("override-dials").value = "";
@@ -830,9 +681,9 @@ document.getElementById("request-backdate-btn").addEventListener("click", () => 
     timestamp
   };
 
-  const requestRef = ref(db, `backdateRequests/${username}/${timestamp}`);
+  const requestRef = ref(db, backdateRequests/${username}/${timestamp});
   set(requestRef, request).then(() => {
-    logAuditEntry("Backdate Request Submitted", `Date: ${selectedDate}`);
+    logAuditEntry("Backdate Request Submitted", Date: ${selectedDate});
     alert("Backdate request submitted for manager review.");
   }).catch(err => {
     console.error("❌ Backdate request error:", err);
@@ -855,12 +706,12 @@ function renderBackdateInbox() {
       for (const id in allRequests[username]) {
         const req = allRequests[username][id];
         const li = document.createElement("li");
-        li.innerHTML = `
+        li.innerHTML = 
           ${username} → ${req.date}<br/>
           Reason: ${req.reason}<br/>
           <button onclick="approveBackdateFirebase('${username}', '${id}', '${req.date}')">✅</button>
           <button onclick="denyBackdateFirebase('${username}', '${id}')">❌</button>
-        `;
+        ;
         container.appendChild(li);
       }
     }
@@ -874,17 +725,17 @@ function approveBackdateFirebase(username, id, date) {
   approved.push({ username, date });
   localStorage.setItem("approvedBackdates", JSON.stringify(approved));
 
-  const requestRef = ref(db, `backdateRequests/${username}/${id}`);
+  const requestRef = ref(db, backdateRequests/${username}/${id});
   set(requestRef, null); // delete from Firebase
 
-  logAuditEntry("Approve Backdate", `Agent: ${username}, Date: ${date}`);
+  logAuditEntry("Approve Backdate", Agent: ${username}, Date: ${date});
   renderBackdateInbox();
   alert("Backdate approved.");
 }
 window.approveBackdateFirebase = approveBackdateFirebase;
 
 function denyBackdateFirebase(username, id) {
-  const requestRef = ref(db, `backdateRequests/${username}/${id}`);
+  const requestRef = ref(db, backdateRequests/${username}/${id});
   set(requestRef, null); // delete from Firebase
   renderBackdateInbox();
   alert("Backdate denied.");
@@ -900,10 +751,10 @@ function renderHourlyBreakdown() {
     for (let hour = 9; hour <= 17; hour++) {
       const count = hourlyData[hour];
       const row = document.createElement("tr");
-      row.innerHTML = `
+      row.innerHTML = 
         <td>${hour}:00 – ${hour + 1}:00</td>
         <td>${count}</td>
-      `;
+      ;
       table.appendChild(row);
     }
   });
@@ -959,7 +810,7 @@ function renderAgentHourlyBreakdown(agentName) {
   const today = new Date().toISOString().slice(0, 10);
   const hourlyCounts = Array(24).fill(0);
 
-  const transferRef = ref(db, `transfers/${agentName}/${today}`);
+  const transferRef = ref(db, transfers/${agentName}/${today});
   get(transferRef).then(snapshot => {
     const transfers = snapshot.exists() ? snapshot.val() : [];
 
@@ -975,10 +826,10 @@ function renderAgentHourlyBreakdown(agentName) {
 
     for (let hour = 9; hour <= 17; hour++) {
       const row = document.createElement("tr");
-      row.innerHTML = `
+      row.innerHTML = 
         <td>${hour}:00 – ${hour + 1}:00</td>
         <td>${hourlyCounts[hour]}</td>
-      `;
+      ;
       table.appendChild(row);
     }
   }).catch(err => {
@@ -1013,7 +864,7 @@ function logAuditEntry(action, details) {
   };
 
   // 🔥 Save to Firebase
-  const auditRef = ref(db, `auditLog/${timestamp}`);
+  const auditRef = ref(db, auditLog/${timestamp});
   set(auditRef, entry);
 
   // ✅ Save to localStorage too
@@ -1023,12 +874,12 @@ function logAuditEntry(action, details) {
 
   // ✅ Also render to DOM immediately
   const row = document.createElement("tr");
-  row.innerHTML = `
+  row.innerHTML = 
     <td>${entry.time}</td>
     <td>${entry.user}</td>
     <td>${entry.role}</td>
     <td>${entry.action}</td>
-    <td>${entry.details}</td>`;
+    <td>${entry.details}</td>;
   const table = document.getElementById("audit-log-table");
   if (table) table.prepend(row);
 }
@@ -1061,12 +912,12 @@ function renderAuditLog() {
     table.innerHTML = ""; // Clear existing
     entries.forEach(entry => {
       const row = document.createElement("tr");
-      row.innerHTML = `
+      row.innerHTML = 
         <td>${entry.time}</td>
         <td>${entry.user}</td>
         <td>${entry.role}</td>
         <td>${entry.action}</td>
-        <td>${entry.details}</td>`;
+        <td>${entry.details}</td>;
       table.appendChild(row);
     });
   }).catch(err => {
@@ -1080,7 +931,7 @@ document.getElementById("download-audit-btn").addEventListener("click", function
   let csv = "Timestamp,User,Role,Action,Details\n";
 
   logs.forEach(log => {
-    csv += `"${log.timestamp}","${log.user}","${log.role}","${log.action}","${log.details}"\n`;
+    csv += "${log.timestamp}","${log.user}","${log.role}","${log.action}","${log.details}"\n;
   });
 
   const blob = new Blob([csv], { type: "text/csv" });
@@ -1103,7 +954,7 @@ document.getElementById("create-user-btn").addEventListener("click", () => {
   getUsers(users => {
     users.push({ username, password, role });
     saveUsers(users);
-    logAuditEntry("Create Account", `Username: ${username}, Role: ${role}`);
+    logAuditEntry("Create Account", Username: ${username}, Role: ${role});
     alert("User created.");
   });
 }); // ✅ This closes the outer .addEventListener()
@@ -1120,7 +971,7 @@ document.getElementById("reset-pass-btn").addEventListener("click", function () 
     if (!u) return alert("User not found.");
     u.password = newPass;
     saveUsers(users);
-    logAuditEntry("Reset Password", `User: ${user}`);
+    logAuditEntry("Reset Password", User: ${user});
     alert("Password reset.");
     document.getElementById("reset-user-pass").value = "";
   });
@@ -1135,7 +986,7 @@ document.getElementById("change-role-btn").addEventListener("click", function ()
     if (!u) return alert("User not found.");
     u.role = newRole;
     saveUsers(users);
-    logAuditEntry("Change Role", `User: ${user}, New Role: ${newRole}`);
+    logAuditEntry("Change Role", User: ${user}, New Role: ${newRole});
     alert("Role updated.");
     populateUserManagementDropdown();
   });
@@ -1143,12 +994,12 @@ document.getElementById("change-role-btn").addEventListener("click", function ()
 
 document.getElementById("delete-user-btn").addEventListener("click", function () {
   const user = document.getElementById("manage-user-select").value;
-  if (!confirm(`Delete user "${user}"? This cannot be undone.`)) return;
+  if (!confirm(Delete user "${user}"? This cannot be undone.)) return;
 
   getUsers(users => {
     users = users.filter(u => u.username !== user);
     saveUsers(users);
-    logAuditEntry("Delete User", `User: ${user}`);
+    logAuditEntry("Delete User", User: ${user});
     alert("User deleted.");
     populateUserManagementDropdown();
   });
@@ -1185,174 +1036,3 @@ document.getElementById("chatbot-send").addEventListener("click", () => {
 
   messages.scrollTop = messages.scrollHeight;
 });
-
-document.getElementById("agent-time-view").addEventListener("change", function () {
-  const filter = this.value;
-  renderAgentDashboardView(filter);
-});
-
-document.getElementById("manager-time-view").addEventListener("change", function () {
-  const filter = this.value;
-  renderManagerDashboardView(filter);
-});
-
-function renderAgentDashboardView(filter) {
-  const username = localStorage.getItem("username");
-  const { start, end } = getDateRange(filter);
-
-  const transferPromises = [];
-  const callPromises = [];
-
-  let date = new Date(start);
-  const endDate = new Date(end);
-
-  while (date <= endDate) {
-    const dateStr = date.toISOString().split("T")[0];
-    transferPromises.push(get(ref(db, `transfers/${username}/${dateStr}`)));
-    callPromises.push(get(ref(db, `calls/${username}/${dateStr}`)));
-    date.setDate(date.getDate() + 1);
-  }
-
-  Promise.all([...transferPromises, ...callPromises]).then(results => {
-    const transfers = results.slice(0, transferPromises.length).flatMap(snap => snap.exists() ? snap.val() : []);
-    const calls = results.slice(transferPromises.length).reduce((sum, snap) => {
-      return sum + (snap.exists() ? snap.val() : 0);
-    }, 0);
-
-    const conversion = calls > 0 ? ((transfers.length / calls) * 100).toFixed(1) + "%" : "0%";
-    const badge = transfers.length >= 5 ? "🏅" : "";
-
-    document.getElementById("transfer-count").textContent = transfers.length;
-    document.getElementById("dial-count").textContent = calls;
-    document.getElementById("conversion-rate").textContent = conversion;
-
-    const leaderboardBadge = document.querySelector("#leaderboard-body td:last-child");
-    if (leaderboardBadge) leaderboardBadge.textContent = badge;
-  }).catch(err => {
-    console.error("❌ Agent view error:", err);
-  });
-}
-
-function renderManagerDashboardView(filter) {
-  console.log("🔄 Manager view changed:", filter);
-
-  const { start, end } = getDateRange(filter);
-
-  renderManagerSummaryFiltered(start, end);
-  renderManagerLeaderboardFiltered(start, end);
-}
-
-function renderManagerSummaryFiltered(startDate, endDate) {
-  const usersRef = ref(db, "users");
-
-  get(usersRef).then(snapshot => {
-    if (!snapshot.exists()) return;
-
-    const agents = snapshot.val().filter(u => u.role === "agent");
-
-    let totalTransfers = 0;
-    let totalCalls = 0;
-    let completed = 0;
-
-    agents.forEach(agent => {
-      const username = agent.username;
-      let transferCount = 0;
-      let callCount = 0;
-
-      const days = getDateRangeDays(startDate, endDate);
-      let dayPromises = days.map(date => {
-        const tRef = ref(db, `transfers/${username}/${date}`);
-        const cRef = ref(db, `calls/${username}/${date}`);
-
-        return Promise.all([get(tRef), get(cRef)]).then(([tSnap, cSnap]) => {
-          if (tSnap.exists()) transferCount += tSnap.val().length;
-          if (cSnap.exists()) callCount += cSnap.val();
-        });
-      });
-
-      Promise.all(dayPromises).then(() => {
-        totalTransfers += transferCount;
-        totalCalls += callCount;
-
-        completed++;
-        if (completed === agents.length) {
-          const conv = totalCalls > 0 ? ((totalTransfers / totalCalls) * 100).toFixed(1) + "%" : "0%";
-          document.getElementById("total-transfers").textContent = totalTransfers;
-          document.getElementById("total-calls").textContent = totalCalls;
-          document.getElementById("avg-conversion").textContent = conv;
-        }
-      });
-    });
-  });
-}
-
-function renderManagerLeaderboardFiltered(startDate, endDate) {
-  const usersRef = ref(db, "users");
-
-  get(usersRef).then(snapshot => {
-    if (!snapshot.exists()) return;
-
-    const agents = snapshot.val().filter(u => u.role === "agent");
-    const leaderboard = [];
-
-    let completed = 0;
-
-    agents.forEach(agent => {
-      const username = agent.username;
-      let transferCount = 0;
-      let callCount = 0;
-
-      const days = getDateRangeDays(startDate, endDate);
-      let dayPromises = days.map(date => {
-        const tRef = ref(db, `transfers/${username}/${date}`);
-        const cRef = ref(db, `calls/${username}/${date}`);
-
-        return Promise.all([get(tRef), get(cRef)]).then(([tSnap, cSnap]) => {
-          if (tSnap.exists()) transferCount += tSnap.val().length;
-          if (cSnap.exists()) callCount += cSnap.val();
-        });
-      });
-
-      Promise.all(dayPromises).then(() => {
-        const conversion = callCount > 0 ? ((transferCount / callCount) * 100).toFixed(1) + "%" : "0%";
-        leaderboard.push({
-          username,
-          transfers: transferCount,
-          calls: callCount,
-          conv: conversion
-        });
-
-        completed++;
-        if (completed === agents.length) {
-          leaderboard.sort((a, b) => b.transfers - a.transfers);
-
-          const tbody = document.getElementById("manager-leaderboard");
-          tbody.innerHTML = "";
-          leaderboard.forEach((a, i) => {
-            const row = document.createElement("tr");
-            row.innerHTML = `
-              <td>${i + 1}</td>
-              <td>${a.username}</td>
-              <td>${a.transfers}</td>
-              <td>${a.calls}</td>
-              <td>${a.conv}</td>
-            `;
-            tbody.appendChild(row);
-          });
-        }
-      });
-    });
-  });
-}
-
-function getDateRangeDays(start, end) {
-  const result = [];
-  const date = new Date(start);
-
-  while (date <= new Date(end)) {
-    result.push(date.toISOString().slice(0, 10));
-    date.setDate(date.getDate() + 1);
-  }
-
-  return result;
-}
