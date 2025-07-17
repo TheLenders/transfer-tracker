@@ -135,7 +135,6 @@ select {
   border: 1px solid #ddd;
 }
 
-<<<<<<< HEAD
 .time-filter {
   margin-bottom: 15px;
   display: flex;
@@ -186,5 +185,3 @@ input.invalid, select.invalid {
   font-weight: bold;
   cursor: pointer;
 }
-=======
->>>>>>> parent of c7de029 (Added the backbone for monthly and weekly views)

@@ -25,6 +25,15 @@
   <div id="agent-dashboard" style="display: none;">
     <button id="logout-btn" style="float: right;">Logout</button>
     <h2>Welcome, <span id="agent-name"></span></h2>
+    <div class="card time-filter">
+  <label for="agent-time-view">View:</label>
+  <select id="agent-time-view">
+    <option value="daily" selected>Today</option>
+    <option value="weekly">This Week</option>
+    <option value="monthly">This Month</option>
+  </select>
+</div>
+
 
     <div class="card">
       <p>📊 Transfers Today: <span id="transfer-count">0</span></p>
@@ -94,6 +103,14 @@
   <div id="manager-dashboard" style="display: none;">
     <button id="logout-btn-manager" style="float: right;">Logout</button>
     <h2>Manager Dashboard</h2>
+    <div class="card time-filter">
+  <label for="manager-time-view">View:</label>
+  <select id="manager-time-view">
+    <option value="daily" selected>Today</option>
+    <option value="weekly">This Week</option>
+    <option value="monthly">This Month</option>
+  </select>
+</div>
 
     <div class="card">
       <h3>Team Summary (Today)</h3>

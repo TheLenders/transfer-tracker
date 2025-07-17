@@ -13,7 +13,10 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const { messages } = req.body;
+    // Parse body manually (required in Vercel serverless)
+    let body = "";
+    await new Promise(resolve => req.on("data", chunk => body += chunk).on("end", resolve));
+    const { messages } = JSON.parse(body);
 
     const response = await openai.chat.completions.create({
       model: "gpt-4",
