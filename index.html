@@ -7,6 +7,47 @@
   <meta name="robots" content="noindex, nofollow">
 </head>
 <!-- AI Chat Widget -->
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const toggle = document.getElementById("support-toggle");
+    const panel = document.getElementById("support-panel");
+    const tabs = document.querySelectorAll(".tab-btn");
+    const contents = document.querySelectorAll(".tab-content");
+
+    if (!toggle || !panel) return;
+
+    toggle.addEventListener("click", () => {
+      panel.style.display = panel.style.display === "none" ? "block" : "none";
+    });
+
+    tabs.forEach(btn => {
+      btn.addEventListener("click", () => {
+        tabs.forEach(b => b.classList.remove("active"));
+        contents.forEach(c => (c.style.display = "none"));
+
+        btn.classList.add("active");
+        document.getElementById("tab-" + btn.dataset.tab).style.display = "block";
+      });
+    });
+
+    document.getElementById("submit-bug").addEventListener("click", () => {
+      const desc = document.getElementById("bug-description").value.trim();
+      if (!desc) return alert("Please describe the bug.");
+
+      const logs = JSON.parse(localStorage.getItem("supportLog")) || [];
+      logs.push({
+        type: "bug",
+        description: desc,
+        user: localStorage.getItem("username") || "Unknown",
+        time: new Date().toLocaleString()
+      });
+      localStorage.setItem("supportLog", JSON.stringify(logs));
+
+      alert("✅ Bug submitted.");
+      document.getElementById("bug-description").value = "";
+    });
+  });
+</script>
 
 <body>
 
