@@ -1301,65 +1301,6 @@ function renderManagerSummaryFiltered(startDate, endDate) {
   });
 }
 
-function renderManagerLeaderboardFiltered(startDate, endDate) {
-  const usersRef = ref(db, "users");
-
-  get(usersRef).then(snapshot => {
-    if (!snapshot.exists()) return;
-
-    const agents = snapshot.val().filter(u => u.role === "agent");
-    const leaderboard = [];
-
-    let completed = 0;
-
-    agents.forEach(agent => {
-      const username = agent.username;
-      let transferCount = 0;
-      let callCount = 0;
-
-      const days = getDateRangeDays(startDate, endDate);
-      let dayPromises = days.map(date => {
-        const tRef = ref(db, `transfers/${username}/${date}`);
-        const cRef = ref(db, `calls/${username}/${date}`);
-
-        return Promise.all([get(tRef), get(cRef)]).then(([tSnap, cSnap]) => {
-          if (tSnap.exists()) transferCount += tSnap.val().length;
-          if (cSnap.exists()) callCount += cSnap.val();
-        });
-      });
-
-      Promise.all(dayPromises).then(() => {
-        const conversion = callCount > 0 ? ((transferCount / callCount) * 100).toFixed(1) + "%" : "0%";
-        leaderboard.push({
-          username,
-          transfers: transferCount,
-          calls: callCount,
-          conv: conversion
-        });
-
-        completed++;
-        if (completed === agents.length) {
-          leaderboard.sort((a, b) => b.transfers - a.transfers);
-
-          const tbody = document.getElementById("manager-leaderboard");
-          tbody.innerHTML = "";
-          leaderboard.forEach((a, i) => {
-            const row = document.createElement("tr");
-            row.innerHTML = `
-              <td>${i + 1}</td>
-              <td>${a.username}</td>
-              <td>${a.transfers}</td>
-              <td>${a.calls}</td>
-              <td>${a.conv}</td>
-            `;
-            tbody.appendChild(row);
-          });
-        }
-      });
-    });
-  });
-}
-
 function getDateRangeDays(start, end) {
   const result = [];
   const date = new Date(start);
