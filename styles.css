@@ -135,13 +135,3 @@ select {
   border: 1px solid #ddd;
 }
 
-.time-filter {
-  margin-bottom: 15px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.time-filter select {
-  padding: 5px;
-}

@@ -514,36 +514,6 @@ function renderLeaderboard() {
 }
 
 // === MANAGER FUNCTIONS ===
-function getDateRangeData(username, startDate, endDate) {
-  return new Promise((resolve) => {
-    const current = new Date(startDate);
-    const end = new Date(endDate);
-    const results = [];
-
-    const checkNext = () => {
-      if (current > end) {
-        resolve(results.flat());
-        return;
-      }
-
-      const dateStr = current.toISOString().slice(0, 10);
-      const refPath = ref(db, `transfers/${username}/${dateStr}`);
-
-      get(refPath).then(snap => {
-        const transfers = snap.exists() ? snap.val() : [];
-        results.push(transfers);
-        current.setDate(current.getDate() + 1);
-        checkNext();
-      }).catch(err => {
-        console.error(`❌ Error fetching ${dateStr} for ${username}:`, err);
-        current.setDate(current.getDate() + 1);
-        checkNext();
-      });
-    };
-
-    checkNext();
-  });
-}
 
 function renderManagerLeaderboard() {
   const today = new Date().toISOString().slice(0, 10);
