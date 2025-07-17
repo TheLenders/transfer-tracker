@@ -155,33 +155,3 @@ input.invalid, select.invalid {
   font-size: 0.8rem;
   margin-top: 2px;
 }
-
-/* Agent form layout polish */
-#transfer-form {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 12px 20px;
-  margin-top: 20px;
-  align-items: center;
-}
-
-#transfer-form input,
-#transfer-form select,
-#transfer-form textarea {
-  width: 100%;
-  padding: 8px;
-  box-sizing: border-box;
-  font-size: 0.95rem;
-}
-
-#transfer-form textarea {
-  min-height: 80px;
-  resize: vertical;
-}
-
-#transfer-form button {
-  grid-column: span 2;
-  padding: 10px;
-  font-weight: bold;
-  cursor: pointer;
-}
