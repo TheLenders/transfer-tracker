@@ -20,32 +20,42 @@ let managerFilterState = "daily"; // default to 'daily' on load
 
 function showDashboard(role) {
   const username = localStorage.getItem("username");
+  const dashboardAgent = document.getElementById("agent-dashboard");
+  const dashboardManager = document.getElementById("manager-dashboard");
 
-  document.getElementById("login-container").style.display = "none";
+  getUsers(users => {
+    const user = users.find(u => u.username === username);
 
-  if (role === "agent") {
-    document.getElementById("agent-dashboard").style.display = "block";
-    document.getElementById("agent-name").textContent = username;
-    document.getElementById("dial-count").textContent = localStorage.getItem("dialCount") || "0";
-    document.getElementById("transfer-date").value = new Date().toISOString().slice(0, 10);
+    if (!user) {
+      alert("Invalid session. Logging out.");
+      localStorage.clear();
+      location.reload();
+      return;
+    }
 
-    renderTransfers();
-    updateStats();
-    renderLeaderboard();
-  }
+    if (user.role !== role) {
+      console.warn("🚨 Role mismatch. Local role:", role, "Real role:", user.role);
+      alert("Session mismatch. Logging out for security.");
+      localStorage.clear();
+      location.reload();
+      return;
+    }
 
-  if (role === "manager") {
-    document.getElementById("manager-dashboard").style.display = "block";
+    document.getElementById("login-container").style.display = "none";
 
-    // Redundant double-check
-    getUsers(users => {
-      const user = users.find(u => u.username === username);
-      if (!user || user.role !== "manager") {
-        alert("Unauthorized access attempt. Logging out.");
-        localStorage.clear();
-        location.reload();
-        return;
-      }
+    if (user.role === "agent") {
+      dashboardAgent.style.display = "block";
+      document.getElementById("agent-name").textContent = username;
+      document.getElementById("dial-count").textContent = localStorage.getItem("dialCount") || "0";
+      document.getElementById("transfer-date").value = new Date().toISOString().slice(0, 10);
+
+      renderTransfers();
+      updateStats();
+      renderLeaderboard();
+    }
+
+    if (user.role === "manager") {
+      dashboardManager.style.display = "block";
 
       renderManagerLeaderboard();
       renderManagerSummary();
@@ -58,9 +68,10 @@ function showDashboard(role) {
       syncAuditToLocalStorage();
       loadSettings();
       populateScorecardDropdown();
-    });
-  }
+    }
+  });
 }
+
 
 // Load settings from Firebase and populate inputs
 function loadSettings() {
@@ -85,11 +96,13 @@ function saveSettings() {
   };
 
   set(settingsRef, newSettings).then(() => {
-    logAuditEntry("Update Settings", JSON.stringify(newSettings));
-    alert("Settings saved!");
-  }).catch(err => {
-    console.error("❌ Error saving settings:", err);
-  });
+  logAuditEntry("Update Settings", JSON.stringify(newSettings));
+  alert("✅ Settings saved!");
+}).catch(err => {
+  console.error("❌ Error saving settings:", err);
+  alert("❌ Failed to save settings.");
+});
+
 }
 
 
@@ -125,15 +138,17 @@ function saveTransferToFirebase(username, date, transfer) {
   get(transferRef).then(snapshot => {
     const current = snapshot.exists() ? snapshot.val() : [];
     current.push(transfer);
-    set(transferRef, current);
-  }).then(() => {
-    logAuditEntry("Submit Transfer", `Client: ${transfer.client}, Banker: ${transfer.banker}`);
-    renderTransfers();
-    updateStats();
-    renderLeaderboard();
-  }).catch(error => {
-    console.error("❌ Error saving transfer to Firebase:", error);
-  });
+    set(transferRef, current).then(() => {
+  logAuditEntry("Submit Transfer", `Client: ${transfer.client}, Banker: ${transfer.banker}`);
+  renderTransfers();
+  updateStats();
+  renderLeaderboard();
+  alert("✅ Transfer submitted successfully.");
+}).catch(error => {
+  console.error("❌ Error saving transfer to Firebase:", error);
+  alert("❌ Transfer failed to save. Try again.");
+});
+  }); // <-- Added closing bracket for saveTransferToFirebase
 }
 
 function saveCallsToFirebase(username, date, callCount) {
@@ -386,19 +401,19 @@ document.getElementById("submit-calls").addEventListener("click", function () {
     const today = getToday();
     const username = localStorage.getItem("username");
 
-    // 🔥 Save to Firebase
     const callsRef = ref(db, `calls/${username}/${today}`);
     set(callsRef, calls).then(() => {
       logAuditEntry("Update Call Count", `Count: ${calls}`);
       document.getElementById("dial-count").textContent = calls;
       updateStats();
       renderLeaderboard();
+      alert("✅ Call count saved!");
     }).catch(error => {
       console.error("❌ Error saving calls to Firebase:", error);
-      alert("Error saving call count. Try again.");
+      alert("❌ Failed to save call count. Try again.");
     });
   } else {
-    alert("Please enter a valid number of calls.");
+    alert("⚠️ Please enter a valid number of calls.");
   }
 });
 
@@ -488,9 +503,8 @@ function updateStats(transferCount) {
 function renderLeaderboard() {
   const today = getToday();
   const leaderboardBody = document.getElementById("leaderboard-body");
-  const managerTable = document.getElementById("manager-leaderboard");
-  if (leaderboardBody) leaderboardBody.innerHTML = "";
-  if (managerTable) managerTable.innerHTML = "";
+  if (!leaderboardBody) return;
+  leaderboardBody.innerHTML = "";
 
   const usersRef = ref(db, "users");
 
@@ -500,7 +514,6 @@ function renderLeaderboard() {
     const users = snapshot.val();
     const rows = [];
 
-    // Loop through each user
     for (const user of users) {
       if (user.role !== "agent") continue;
 
@@ -521,7 +534,6 @@ function renderLeaderboard() {
           badge
         });
 
-        // Wait for all rows before rendering
         if (rows.length === users.filter(u => u.role === "agent").length) {
           rows.sort((a, b) => b.transfers - a.transfers);
           rows.forEach((row, i) => {
@@ -532,10 +544,9 @@ function renderLeaderboard() {
                 <td>${row.transfers}</td>
                 <td>${row.calls}</td>
                 <td>${row.conversion}</td>
-                ${leaderboardBody ? `<td>${row.badge}</td>` : ""}
+                <td>${row.badge}</td>
               </tr>`;
-            if (leaderboardBody) leaderboardBody.innerHTML += html;
-            if (managerTable) managerTable.innerHTML += html;
+            leaderboardBody.innerHTML += html;
           });
         }
       });
@@ -544,6 +555,7 @@ function renderLeaderboard() {
     console.error("❌ Leaderboard error:", err);
   });
 }
+
 
 // === MANAGER FUNCTIONS ===
 function getDateRangeData(username, startDate, endDate) {
@@ -607,11 +619,12 @@ function renderManagerLeaderboard() {
 
         completed++;
         if (completed === users.length) {
-          // All data fetched, render
+          // Sort and render
           rows.sort((a, b) => b.transfers - a.transfers);
 
           const tbody = document.getElementById("manager-leaderboard");
           tbody.innerHTML = "";
+
           rows.forEach((agent, i) => {
             const row = document.createElement("tr");
             row.innerHTML = `
@@ -633,6 +646,8 @@ function renderManagerLeaderboard() {
     console.error("❌ Failed to load users:", err);
   });
 }
+
+
 
 
 function renderManagerSummary() {
@@ -737,10 +752,18 @@ document.getElementById("override-save-btn").addEventListener("click", function 
   if (!agent || isNaN(newDials)) return alert("Invalid input");
 
   const today = new Date().toISOString().slice(0, 10);
-  let dialData = JSON.parse(localStorage.getItem("allDialCounts")) || {};
-  dialData[agent + "_" + today] = newDials;
-  localStorage.setItem("allDialCounts", JSON.stringify(dialData));
+  const callsRef = ref(db, `calls/${agent}/${today}`);
+set(ref(db, `calls/${agent}/${today}`), newDials).then(() => {
   logAuditEntry("Override Dials", `Agent: ${agent}, Dials set to: ${newDials}`);
+  document.getElementById("override-dials").value = "";
+  renderManagerLeaderboard();
+  renderManagerSummary();
+  alert("✅ Call count updated.");
+}).catch(err => {
+  console.error("❌ Error overriding dials:", err);
+  alert("❌ Failed to update calls. Try again.");
+});
+
 
 
   document.getElementById("override-dials").value = "";
