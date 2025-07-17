@@ -16,35 +16,46 @@ const firebaseConfig = {
 // ✅ New style initialization
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
+let managerFilterState = "daily"; // default to 'daily' on load
 
 function showDashboard(role) {
   const username = localStorage.getItem("username");
+  const dashboardAgent = document.getElementById("agent-dashboard");
+  const dashboardManager = document.getElementById("manager-dashboard");
 
-  document.getElementById("login-container").style.display = "none";
+  getUsers(users => {
+    const user = users.find(u => u.username === username);
 
-  if (role === "agent") {
-    document.getElementById("agent-dashboard").style.display = "block";
-    document.getElementById("agent-name").textContent = username;
-    document.getElementById("dial-count").textContent = localStorage.getItem("dialCount") || "0";
-    document.getElementById("transfer-date").value = new Date().toISOString().slice(0, 10);
+    if (!user) {
+      alert("Invalid session. Logging out.");
+      localStorage.clear();
+      location.reload();
+      return;
+    }
 
-    renderTransfers();
-    updateStats();
-    renderLeaderboard();
-  }
+    if (user.role !== role) {
+      console.warn("🚨 Role mismatch. Local role:", role, "Real role:", user.role);
+      alert("Session mismatch. Logging out for security.");
+      localStorage.clear();
+      location.reload();
+      return;
+    }
 
-  if (role === "manager") {
-    document.getElementById("manager-dashboard").style.display = "block";
+    document.getElementById("login-container").style.display = "none";
 
-    // Redundant double-check
-    getUsers(users => {
-      const user = users.find(u => u.username === username);
-      if (!user || user.role !== "manager") {
-        alert("Unauthorized access attempt. Logging out.");
-        localStorage.clear();
-        location.reload();
-        return;
-      }
+    if (user.role === "agent") {
+      dashboardAgent.style.display = "block";
+      document.getElementById("agent-name").textContent = username;
+      document.getElementById("dial-count").textContent = localStorage.getItem("dialCount") || "0";
+      document.getElementById("transfer-date").value = new Date().toISOString().slice(0, 10);
+
+      renderTransfers();
+      updateStats();
+      renderLeaderboard();
+    }
+
+    if (user.role === "manager") {
+      dashboardManager.style.display = "block";
 
       renderManagerLeaderboard();
       renderManagerSummary();
@@ -57,9 +68,10 @@ function showDashboard(role) {
       syncAuditToLocalStorage();
       loadSettings();
       populateScorecardDropdown();
-    });
-  }
+    }
+  });
 }
+
 
 // Load settings from Firebase and populate inputs
 function loadSettings() {
@@ -84,11 +96,13 @@ function saveSettings() {
   };
 
   set(settingsRef, newSettings).then(() => {
-    logAuditEntry("Update Settings", JSON.stringify(newSettings));
-    alert("Settings saved!");
-  }).catch(err => {
-    console.error("❌ Error saving settings:", err);
-  });
+  logAuditEntry("Update Settings", JSON.stringify(newSettings));
+  alert("✅ Settings saved!");
+}).catch(err => {
+  console.error("❌ Error saving settings:", err);
+  alert("❌ Failed to save settings.");
+});
+
 }
 
 
@@ -124,15 +138,17 @@ function saveTransferToFirebase(username, date, transfer) {
   get(transferRef).then(snapshot => {
     const current = snapshot.exists() ? snapshot.val() : [];
     current.push(transfer);
-    set(transferRef, current);
-  }).then(() => {
-    logAuditEntry("Submit Transfer", `Client: ${transfer.client}, Banker: ${transfer.banker}`);
-    renderTransfers();
-    updateStats();
-    renderLeaderboard();
-  }).catch(error => {
-    console.error("❌ Error saving transfer to Firebase:", error);
-  });
+    set(transferRef, current).then(() => {
+  logAuditEntry("Submit Transfer", `Client: ${transfer.client}, Banker: ${transfer.banker}`);
+  renderTransfers();
+  updateStats();
+  renderLeaderboard();
+  alert("✅ Transfer submitted successfully.");
+}).catch(error => {
+  console.error("❌ Error saving transfer to Firebase:", error);
+  alert("❌ Transfer failed to save. Try again.");
+});
+  }); // <-- Added closing bracket for saveTransferToFirebase
 }
 
 function saveCallsToFirebase(username, date, callCount) {
@@ -147,10 +163,14 @@ function saveCallsToFirebase(username, date, callCount) {
 }
 
 function populateScorecardDropdown() {
-  document.getElementById("scorecard-select").addEventListener("change", function () {
-  renderAgentScorecard(this.value);
-});
-  const dropdown = document.getElementById("scorecard-select");
+  const selectEl = document.getElementById("scorecard-select");
+  if (!selectEl) return; // 🛑 Prevent the error
+
+  selectEl.addEventListener("change", function () {
+    renderAgentScorecard(this.value);
+  });
+
+  const dropdown = selectEl;
   dropdown.innerHTML = "";
 
   const usersRef = ref(db, "users");
@@ -172,6 +192,7 @@ function populateScorecardDropdown() {
     }
   });
 }
+
 
 
 
@@ -323,55 +344,69 @@ document.getElementById("transfer-date").addEventListener("change", function () 
 });
 
 // === SUBMIT TRANSFER ===
-document.getElementById("submit-transfer").addEventListener("click", function () {
+document.getElementById("submit-transfer").addEventListener("click", async function () {
   const selectedDate = document.getElementById("transfer-date").value || new Date().toISOString().slice(0, 10);
   const today = new Date().toISOString().slice(0, 10);
   const username = localStorage.getItem("username");
 
   if (selectedDate !== today) {
-    const approved = JSON.parse(localStorage.getItem("approvedBackdates")) || [];
-    const allowed = approved.find(r => r.username === username && r.date === selectedDate);
-    if (!allowed) {
-      alert("Backdated transfer not approved by manager.");
-      return;
-    }
+  const approvedRef = ref(db, `approvedBackdates/${username}/${selectedDate}`);
+  const approvedSnap = await get(approvedRef);
+  const isApproved = approvedSnap.exists();
+
+  if (!isApproved) {
+    alert("Backdated transfer not approved by manager.");
+    return;
   }
+}
 
-  const client = document.getElementById("client-name").value;
-  const phone = document.getElementById("client-phone").value;
-  const banker = document.getElementById("banker").value;
-  const loanPurpose = document.getElementById("loan-purpose").value;
-  const notes = document.getElementById("notes").value;
+  const client = document.getElementById("client-name");
+  const phone = document.getElementById("client-phone");
+  const banker = document.getElementById("banker");
+  const loanPurpose = document.getElementById("loan-purpose");
+  const notes = document.getElementById("notes");
 
-  if (!client || !phone || !banker || !loanPurpose) {
-    alert("Please fill in all required fields.");
+  // Basic validation
+  let valid = true;
+
+  [client, phone, banker, loanPurpose].forEach(el => {
+    el.classList.remove("invalid");
+    if (!el.value.trim() || (el === phone && el.value.replace(/\D/g, "").length !== 10)) {
+      el.classList.add("invalid");
+      valid = false;
+    }
+  });
+
+  if (!valid) {
+    alert("⚠️ Please fill in all required fields correctly.");
     return;
   }
 
   const transfer = {
     agent: username,
-    client,
-    phone,
-    banker,
-    loanPurpose,
-    notes,
+    client: client.value.trim(),
+    phone: phone.value.trim(),
+    banker: banker.value.trim(),
+    loanPurpose: loanPurpose.value.trim(),
+    notes: notes.value.trim(),
     timestamp: new Date().toISOString(),
   };
 
   saveTransferToFirebase(username, selectedDate, transfer);
-  logAuditEntry("Submit Transfer", `Client: ${client}, Banker: ${banker}`);
+  logAuditEntry("Submit Transfer", `Client: ${transfer.client}, Banker: ${transfer.banker}`);
 
-
-  document.getElementById("client-name").value = "";
-  document.getElementById("client-phone").value = "";
-  document.getElementById("banker").value = "";
-  document.getElementById("loan-purpose").value = "";
-  document.getElementById("notes").value = "";
+  // Clear fields
+  client.value = "";
+  phone.value = "";
+  banker.value = "";
+  loanPurpose.value = "";
+  notes.value = "";
 
   renderTransfers();
   updateStats();
   renderLeaderboard();
 });
+
 
 // === SUBMIT DIALS ===
 document.getElementById("submit-calls").addEventListener("click", function () {
@@ -380,21 +415,47 @@ document.getElementById("submit-calls").addEventListener("click", function () {
     const today = getToday();
     const username = localStorage.getItem("username");
 
-    // 🔥 Save to Firebase
     const callsRef = ref(db, `calls/${username}/${today}`);
     set(callsRef, calls).then(() => {
       logAuditEntry("Update Call Count", `Count: ${calls}`);
       document.getElementById("dial-count").textContent = calls;
       updateStats();
       renderLeaderboard();
+      alert("✅ Call count saved!");
     }).catch(error => {
       console.error("❌ Error saving calls to Firebase:", error);
-      alert("Error saving call count. Try again.");
+      alert("❌ Failed to save call count. Try again.");
     });
   } else {
-    alert("Please enter a valid number of calls.");
+    alert("⚠️ Please enter a valid number of calls.");
   }
 });
+
+function getDateRange(filterType) {
+  const today = new Date();
+  let start, end;
+
+  if (filterType === "daily") {
+    start = end = today.toISOString().split("T")[0];
+  } else if (filterType === "weekly") {
+    const day = today.getDay(); // 0 (Sun) - 6 (Sat)
+    const diffToMonday = day === 0 ? 6 : day - 1;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - diffToMonday);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    start = monday.toISOString().split("T")[0];
+    end = sunday.toISOString().split("T")[0];
+  } else if (filterType === "monthly") {
+    const first = new Date(today.getFullYear(), today.getMonth(), 1);
+    const last = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    start = first.toISOString().split("T")[0];
+    end = last.toISOString().split("T")[0];
+  }
+
+  return { start, end };
+}
+
 
 function getToday() {
   return new Date().toISOString().split("T")[0];
@@ -456,9 +517,8 @@ function updateStats(transferCount) {
 function renderLeaderboard() {
   const today = getToday();
   const leaderboardBody = document.getElementById("leaderboard-body");
-  const managerTable = document.getElementById("manager-leaderboard");
-  if (leaderboardBody) leaderboardBody.innerHTML = "";
-  if (managerTable) managerTable.innerHTML = "";
+  if (!leaderboardBody) return;
+  leaderboardBody.innerHTML = "";
 
   const usersRef = ref(db, "users");
 
@@ -468,7 +528,6 @@ function renderLeaderboard() {
     const users = snapshot.val();
     const rows = [];
 
-    // Loop through each user
     for (const user of users) {
       if (user.role !== "agent") continue;
 
@@ -489,7 +548,6 @@ function renderLeaderboard() {
           badge
         });
 
-        // Wait for all rows before rendering
         if (rows.length === users.filter(u => u.role === "agent").length) {
           rows.sort((a, b) => b.transfers - a.transfers);
           rows.forEach((row, i) => {
@@ -500,10 +558,9 @@ function renderLeaderboard() {
                 <td>${row.transfers}</td>
                 <td>${row.calls}</td>
                 <td>${row.conversion}</td>
-                ${leaderboardBody ? `<td>${row.badge}</td>` : ""}
+                <td>${row.badge}</td>
               </tr>`;
-            if (leaderboardBody) leaderboardBody.innerHTML += html;
-            if (managerTable) managerTable.innerHTML += html;
+            leaderboardBody.innerHTML += html;
           });
         }
       });
@@ -513,7 +570,38 @@ function renderLeaderboard() {
   });
 }
 
+
 // === MANAGER FUNCTIONS ===
+function getDateRangeData(username, startDate, endDate) {
+  return new Promise((resolve) => {
+    const current = new Date(startDate);
+    const end = new Date(endDate);
+    const results = [];
+
+    const checkNext = () => {
+      if (current > end) {
+        resolve(results.flat());
+        return;
+      }
+
+      const dateStr = current.toISOString().slice(0, 10);
+      const refPath = ref(db, `transfers/${username}/${dateStr}`);
+
+      get(refPath).then(snap => {
+        const transfers = snap.exists() ? snap.val() : [];
+        results.push(transfers);
+        current.setDate(current.getDate() + 1);
+        checkNext();
+      }).catch(err => {
+        console.error(`❌ Error fetching ${dateStr} for ${username}:`, err);
+        current.setDate(current.getDate() + 1);
+        checkNext();
+      });
+    };
+
+    checkNext();
+  });
+}
 
 function renderManagerLeaderboard() {
   const today = new Date().toISOString().slice(0, 10);
@@ -545,11 +633,12 @@ function renderManagerLeaderboard() {
 
         completed++;
         if (completed === users.length) {
-          // All data fetched, render
+          // Sort and render
           rows.sort((a, b) => b.transfers - a.transfers);
 
           const tbody = document.getElementById("manager-leaderboard");
           tbody.innerHTML = "";
+
           rows.forEach((agent, i) => {
             const row = document.createElement("tr");
             row.innerHTML = `
@@ -573,8 +662,10 @@ function renderManagerLeaderboard() {
 }
 
 
+
+
 function renderManagerSummary() {
-  const today = new Date().toISOString().slice(0, 10);
+  const { start, end } = getDateRange(managerFilterState);
   const usersRef = ref(db, "users");
 
   get(usersRef).then(snapshot => {
@@ -587,14 +678,27 @@ function renderManagerSummary() {
 
     users.forEach(user => {
       const username = user.username;
-      const transferRef = ref(db, `transfers/${username}/${today}`);
-      const callsRef = ref(db, `calls/${username}/${today}`);
 
-      Promise.all([get(transferRef), get(callsRef)]).then(([tSnap, cSnap]) => {
-        const transfers = tSnap.exists() ? tSnap.val().length : 0;
-        const calls = cSnap.exists() ? cSnap.val() : 0;
+      const transferPromises = [];
+      const callPromises = [];
 
-        totalTransfers += transfers;
+      let date = new Date(start);
+      const endDate = new Date(end);
+
+      while (date <= endDate) {
+        const dateStr = date.toISOString().split("T")[0];
+        transferPromises.push(get(ref(db, `transfers/${username}/${dateStr}`)));
+        callPromises.push(get(ref(db, `calls/${username}/${dateStr}`)));
+        date.setDate(date.getDate() + 1);
+      }
+
+      Promise.all([...transferPromises, ...callPromises]).then(results => {
+        const transfers = results.slice(0, transferPromises.length).flatMap(snap => snap.exists() ? snap.val() : []);
+        const calls = results.slice(transferPromises.length).reduce((sum, snap) => {
+          return sum + (snap.exists() ? snap.val() : 0);
+        }, 0);
+
+        totalTransfers += transfers.length;
         totalCalls += calls;
 
         completed++;
@@ -604,8 +708,6 @@ function renderManagerSummary() {
           document.getElementById("total-calls").textContent = totalCalls;
           document.getElementById("avg-conversion").textContent = avgConv;
         }
-      }).catch(err => {
-        console.error("❌ Error fetching summary data:", err);
       });
     });
   });
@@ -664,10 +766,18 @@ document.getElementById("override-save-btn").addEventListener("click", function 
   if (!agent || isNaN(newDials)) return alert("Invalid input");
 
   const today = new Date().toISOString().slice(0, 10);
-  let dialData = JSON.parse(localStorage.getItem("allDialCounts")) || {};
-  dialData[agent + "_" + today] = newDials;
-  localStorage.setItem("allDialCounts", JSON.stringify(dialData));
+  const callsRef = ref(db, `calls/${agent}/${today}`);
+set(ref(db, `calls/${agent}/${today}`), newDials).then(() => {
   logAuditEntry("Override Dials", `Agent: ${agent}, Dials set to: ${newDials}`);
+  document.getElementById("override-dials").value = "";
+  renderManagerLeaderboard();
+  renderManagerSummary();
+  alert("✅ Call count updated.");
+}).catch(err => {
+  console.error("❌ Error overriding dials:", err);
+  alert("❌ Failed to update calls. Try again.");
+});
+
 
 
   document.getElementById("override-dials").value = "";
@@ -753,17 +863,25 @@ function renderBackdateInbox() {
   });
 }
 
-function approveBackdateFirebase(username, id, date) {
-  const approved = JSON.parse(localStorage.getItem("approvedBackdates")) || [];
-  approved.push({ username, date });
-  localStorage.setItem("approvedBackdates", JSON.stringify(approved));
+async function approveBackdateFirebase(username, requestId, date) {
+  try {
+    // Save approval in Firebase
+    const approvedRef = ref(db, `approvedBackdates/${username}/${date}`);
+    await set(approvedRef, true);
 
-  const requestRef = ref(db, `backdateRequests/${username}/${id}`);
-  set(requestRef, null); // delete from Firebase
+    // Remove request
+    await remove(ref(db, `backdateRequests/${username}/${requestId}`));
 
-  logAuditEntry("Approve Backdate", `Agent: ${username}, Date: ${date}`);
-  renderBackdateInbox();
-  alert("Backdate approved.");
+    // Log audit
+    logAuditEntry("Approve Backdate", `User: ${username}, Date: ${date}`);
+
+    // Refresh UI
+    renderBackdateInbox();
+    alert(`Backdate for ${username} on ${date} approved.`);
+  } catch (error) {
+    console.error("Error approving backdate:", error);
+    alert("Failed to approve backdate.");
+  }
 }
 window.approveBackdateFirebase = approveBackdateFirebase;
 
@@ -1070,3 +1188,173 @@ document.getElementById("chatbot-send").addEventListener("click", () => {
   messages.scrollTop = messages.scrollHeight;
 });
 
+document.getElementById("agent-time-view").addEventListener("change", function () {
+  const filter = this.value;
+  renderAgentDashboardView(filter);
+});
+
+document.getElementById("manager-time-view").addEventListener("change", function () {
+  const filter = this.value;
+  renderManagerDashboardView(filter);
+});
+
+function renderAgentDashboardView(filter) {
+  const username = localStorage.getItem("username");
+  const { start, end } = getDateRange(filter);
+
+  const transferPromises = [];
+  const callPromises = [];
+
+  let date = new Date(start);
+  const endDate = new Date(end);
+
+  while (date <= endDate) {
+    const dateStr = date.toISOString().split("T")[0];
+    transferPromises.push(get(ref(db, `transfers/${username}/${dateStr}`)));
+    callPromises.push(get(ref(db, `calls/${username}/${dateStr}`)));
+    date.setDate(date.getDate() + 1);
+  }
+
+  Promise.all([...transferPromises, ...callPromises]).then(results => {
+    const transfers = results.slice(0, transferPromises.length).flatMap(snap => snap.exists() ? snap.val() : []);
+    const calls = results.slice(transferPromises.length).reduce((sum, snap) => {
+      return sum + (snap.exists() ? snap.val() : 0);
+    }, 0);
+
+    const conversion = calls > 0 ? ((transfers.length / calls) * 100).toFixed(1) + "%" : "0%";
+    const badge = transfers.length >= 5 ? "🏅" : "";
+
+    document.getElementById("transfer-count").textContent = transfers.length;
+    document.getElementById("dial-count").textContent = calls;
+    document.getElementById("conversion-rate").textContent = conversion;
+
+    const leaderboardBadge = document.querySelector("#leaderboard-body td:last-child");
+    if (leaderboardBadge) leaderboardBadge.textContent = badge;
+  }).catch(err => {
+    console.error("❌ Agent view error:", err);
+  });
+}
+
+function renderManagerDashboardView(filter) {
+  console.log("🔄 Manager view changed:", filter);
+
+  const { start, end } = getDateRange(filter);
+
+  renderManagerSummaryFiltered(start, end);
+  renderManagerLeaderboardFiltered(start, end);
+}
+
+function renderManagerSummaryFiltered(startDate, endDate) {
+  const usersRef = ref(db, "users");
+
+  get(usersRef).then(snapshot => {
+    if (!snapshot.exists()) return;
+
+    const agents = snapshot.val().filter(u => u.role === "agent");
+
+    let totalTransfers = 0;
+    let totalCalls = 0;
+    let completed = 0;
+
+    agents.forEach(agent => {
+      const username = agent.username;
+      let transferCount = 0;
+      let callCount = 0;
+
+      const days = getDateRangeDays(startDate, endDate);
+      let dayPromises = days.map(date => {
+        const tRef = ref(db, `transfers/${username}/${date}`);
+        const cRef = ref(db, `calls/${username}/${date}`);
+
+        return Promise.all([get(tRef), get(cRef)]).then(([tSnap, cSnap]) => {
+          if (tSnap.exists()) transferCount += tSnap.val().length;
+          if (cSnap.exists()) callCount += cSnap.val();
+        });
+      });
+
+      Promise.all(dayPromises).then(() => {
+        totalTransfers += transferCount;
+        totalCalls += callCount;
+
+        completed++;
+        if (completed === agents.length) {
+          const conv = totalCalls > 0 ? ((totalTransfers / totalCalls) * 100).toFixed(1) + "%" : "0%";
+          document.getElementById("total-transfers").textContent = totalTransfers;
+          document.getElementById("total-calls").textContent = totalCalls;
+          document.getElementById("avg-conversion").textContent = conv;
+        }
+      });
+    });
+  });
+}
+
+function renderManagerLeaderboardFiltered(startDate, endDate) {
+  const usersRef = ref(db, "users");
+
+  get(usersRef).then(snapshot => {
+    if (!snapshot.exists()) return;
+
+    const agents = snapshot.val().filter(u => u.role === "agent");
+    const leaderboard = [];
+
+    let completed = 0;
+
+    agents.forEach(agent => {
+      const username = agent.username;
+      let transferCount = 0;
+      let callCount = 0;
+
+      const days = getDateRangeDays(startDate, endDate);
+      let dayPromises = days.map(date => {
+        const tRef = ref(db, `transfers/${username}/${date}`);
+        const cRef = ref(db, `calls/${username}/${date}`);
+
+        return Promise.all([get(tRef), get(cRef)]).then(([tSnap, cSnap]) => {
+          if (tSnap.exists()) transferCount += tSnap.val().length;
+          if (cSnap.exists()) callCount += cSnap.val();
+        });
+      });
+
+      Promise.all(dayPromises).then(() => {
+        const conversion = callCount > 0 ? ((transferCount / callCount) * 100).toFixed(1) + "%" : "0%";
+        leaderboard.push({
+          username,
+          transfers: transferCount,
+          calls: callCount,
+          conv: conversion
+        });
+
+        completed++;
+        if (completed === agents.length) {
+          leaderboard.sort((a, b) => b.transfers - a.transfers);
+
+          const tbody = document.getElementById("manager-leaderboard");
+          tbody.innerHTML = "";
+          leaderboard.forEach((a, i) => {
+            const row = document.createElement("tr");
+            row.innerHTML = `
+              <td>${i + 1}</td>
+              <td>${a.username}</td>
+              <td>${a.transfers}</td>
+              <td>${a.calls}</td>
+              <td>${a.conv}</td>
+            `;
+            tbody.appendChild(row);
+          });
+        }
+      });
+    });
+  });
+}
+
+function getDateRangeDays(start, end) {
+  const result = [];
+  const date = new Date(start);
+
+  while (date <= new Date(end)) {
+    result.push(date.toISOString().slice(0, 10));
+    date.setDate(date.getDate() + 1);
+  }
+
+  return result;
+}
