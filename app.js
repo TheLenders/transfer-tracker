@@ -16,6 +16,7 @@ const firebaseConfig = {
 // ✅ New style initialization
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
+let cachedUsers = [];
 let managerFilterState = "daily"; // default to 'daily' on load
 
 function showDashboard(role) {
@@ -87,6 +88,8 @@ function loadSettings() {
   });
 }
 
+
+
 // Save settings to Firebase
 function saveSettings() {
   const settingsRef = ref(db, "settings");
@@ -127,13 +130,27 @@ function getUsersFromFirebase(callback) {
     callback(users);
   });
 }
+
+async function cacheUsersOnce() {
+  try {
+    const snapshot = await get(ref(db, "users"));
+    if (snapshot.exists()) {
+      cachedUsers = snapshot.val();
+    } else {
+      cachedUsers = [];
+    }
+  } catch (error) {
+    console.error("❌ Failed to cache users:", error);
+    cachedUsers = [];
+  }
+}
 function saveUsersToFirebase(users) {
   set(ref(db, "users"), users);
 }
 
 
 function getUsers(callback) {
-  getUsersFromFirebase(callback);
+  callback(cachedUsers);
 }
 
 function saveUsers(users) {
@@ -171,7 +188,7 @@ function saveCallsToFirebase(username, date, callCount) {
 
 function populateScorecardDropdown() {
   const selectEl = document.getElementById("scorecard-select");
-  if (!selectEl) return; // 🛑 Prevent the error
+  if (!selectEl) return;
 
   selectEl.addEventListener("change", function () {
     renderAgentScorecard(this.value);
@@ -180,30 +197,21 @@ function populateScorecardDropdown() {
   const dropdown = selectEl;
   dropdown.innerHTML = "";
 
-  const usersRef = ref(db, "users");
-  get(usersRef).then(snapshot => {
-    if (!snapshot.exists()) return;
-    const users = snapshot.val();
+  const users = cachedUsers;
 
-    users.forEach(user => {
-      if (user.role === "agent") {
-        const option = document.createElement("option");
-        option.value = user.username;
-        option.textContent = user.username;
-        dropdown.appendChild(option);
-      }
-    });
-
-    if (users.length > 0) {
-  const first = users.find(u => u.role === "agent");
-  dropdown.value = first.username; // visually selects in UI
-  renderAgentScorecard(first.username); // loads data
-}
+  const agents = users.filter(u => u.role === "agent");
+  agents.forEach(user => {
+    const option = document.createElement("option");
+    option.value = user.username;
+    option.textContent = user.username;
+    dropdown.appendChild(option);
   });
+
+  if (agents.length > 0) {
+    dropdown.value = agents[0].username;
+    renderAgentScorecard(agents[0].username);
+  }
 }
-
-
-
 
 function renderAgentScorecard(agentName) {
   const today = getToday();
@@ -281,23 +289,28 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 // === LOGIN ===
 
-document.getElementById("login-btn").addEventListener("click", async () => {
+document.getElementById("login-btn").addEventListener("click", () => {
+  handleLogin();
+});
+
+async function handleLogin() {
   const username = document.getElementById("username").value.trim();
   const password = document.getElementById("password").value;
 
-  const hashedInput = await hashPassword(password); // hash typed password
+  const hashedInput = await hashPassword(password);
 
-  getUsers(users => {
-    const user = users.find(u => u.username === username && u.passwordHash === hashedInput);
-    if (!user) return alert("Invalid login.");
+  await cacheUsersOnce(); // ✅ this line is now valid
+  const user = cachedUsers.find(u => u.username === username && u.passwordHash === hashedInput);
+  if (!user) return alert("Invalid login.");
 
-    localStorage.setItem("username", user.username);
-    localStorage.setItem("role", user.role);
-    localStorage.setItem("isLoggedIn", true);
-    logAuditEntry("Login", `Role: ${user.role}`);
-    showDashboard(user.role);
-  });
-});
+  localStorage.setItem("username", user.username);
+  localStorage.setItem("role", user.role);
+  localStorage.setItem("isLoggedIn", true);
+
+  logAuditEntry("Login", `Role: ${user.role}`);
+  showDashboard(user.role);
+}
+
 
 
 
@@ -534,54 +547,50 @@ function renderLeaderboard() {
   if (!leaderboardBody) return;
   leaderboardBody.innerHTML = "";
 
-  const usersRef = ref(db, "users");
+  const users = cachedUsers;
+  const rows = [];
 
-  get(usersRef).then(snapshot => {
-    if (!snapshot.exists()) return;
+  const agentUsers = users.filter(user => user.role === "agent");
+  let completed = 0;
 
-    const users = snapshot.val();
-    const rows = [];
+  for (const user of agentUsers) {
+    const transferRef = ref(db, `transfers/${user.username}/${today}`);
+    const callsRef = ref(db, `calls/${user.username}/${today}`);
 
-    for (const user of users) {
-      if (user.role !== "agent") continue;
+    Promise.all([get(transferRef), get(callsRef)]).then(([tSnap, cSnap]) => {
+      const transfers = tSnap.exists() ? tSnap.val() : [];
+      const calls = cSnap.exists() ? cSnap.val() : 0;
+      const conversion = calls > 0 ? ((transfers.length / calls) * 100).toFixed(1) + "%" : "0%";
+      const badge = transfers.length >= 5 ? "🏅" : "";
 
-      const transferRef = ref(db, `transfers/${user.username}/${today}`);
-      const callsRef = ref(db, `calls/${user.username}/${today}`);
-
-      Promise.all([get(transferRef), get(callsRef)]).then(([tSnap, cSnap]) => {
-        const transfers = tSnap.exists() ? tSnap.val() : [];
-        const calls = cSnap.exists() ? cSnap.val() : 0;
-        const conversion = calls > 0 ? ((transfers.length / calls) * 100).toFixed(1) + "%" : "0%";
-        const badge = transfers.length >= 5 ? "🏅" : "";
-
-        rows.push({
-          username: user.username,
-          transfers: transfers.length,
-          calls,
-          conversion,
-          badge
-        });
-
-        if (rows.length === users.filter(u => u.role === "agent").length) {
-          rows.sort((a, b) => b.transfers - a.transfers);
-          rows.forEach((row, i) => {
-            const html = `
-              <tr>
-                <td>${i + 1}</td>
-                <td>${row.username}</td>
-                <td>${row.transfers}</td>
-                <td>${row.calls}</td>
-                <td>${row.conversion}</td>
-                <td>${row.badge}</td>
-              </tr>`;
-            leaderboardBody.innerHTML += html;
-          });
-        }
+      rows.push({
+        username: user.username,
+        transfers: transfers.length,
+        calls,
+        conversion,
+        badge
       });
-    }
-  }).catch(err => {
-    console.error("❌ Leaderboard error:", err);
-  });
+
+      completed++;
+      if (completed === agentUsers.length) {
+        rows.sort((a, b) => b.transfers - a.transfers);
+        rows.forEach((row, i) => {
+          const html = `
+            <tr>
+              <td>${i + 1}</td>
+              <td>${row.username}</td>
+              <td>${row.transfers}</td>
+              <td>${row.calls}</td>
+              <td>${row.conversion}</td>
+              <td>${row.badge}</td>
+            </tr>`;
+          leaderboardBody.innerHTML += html;
+        });
+      }
+    }).catch(err => {
+      console.error(`❌ Failed to load leaderboard data for ${user.username}:`, err);
+    });
+  }
 }
 
 
@@ -618,7 +627,7 @@ function getDateRangeData(username, startDate, endDate) {
 }
 
 function renderManagerLeaderboardFiltered(startDate, endDate) {
-  const usersRef = ref(db, "users");
+  const agents = cachedUsers.filter(u => u.role === "agent");
 
   get(usersRef).then(snapshot => {
     if (!snapshot.exists()) return;
@@ -678,7 +687,7 @@ function renderManagerLeaderboardFiltered(startDate, endDate) {
 
 function renderManagerSummary() {
   const { start, end } = getDateRange(managerFilterState);
-  const usersRef = ref(db, "users");
+  const users = cachedUsers.filter(u => u.role === "agent");
 
   get(usersRef).then(snapshot => {
     if (!snapshot.exists()) return;
@@ -796,20 +805,15 @@ function populateOverrideDropdown() {
   const dropdown = document.getElementById("override-agent-select");
   dropdown.innerHTML = "";
 
-  const usersRef = ref(db, "users");
+  const users = cachedUsers;
 
-  get(usersRef).then(snapshot => {
-    if (!snapshot.exists()) return;
-    const users = snapshot.val();
-
-    users.forEach(user => {
-      if (user.role === "agent") {
-        const option = document.createElement("option");
-        option.value = user.username;
-        option.textContent = user.username;
-        dropdown.appendChild(option);
-      }
-    });
+  users.forEach(user => {
+    if (user.role === "agent") {
+      const option = document.createElement("option");
+      option.value = user.username;
+      option.textContent = user.username;
+      dropdown.appendChild(option);
+    }
   });
 }
 
@@ -925,43 +929,35 @@ function populateAnalyticsDropdown() {
   const dropdown = document.getElementById("analytics-agent-select");
   dropdown.innerHTML = "";
 
-  const usersRef = ref(db, "users");
-  get(usersRef).then(snapshot => {
-    if (!snapshot.exists()) return;
-    const users = snapshot.val();
+  const users = cachedUsers;
 
-    users.forEach(user => {
-      if (user.role === "agent") {
-        const option = document.createElement("option");
-        option.value = user.username;
-        option.textContent = user.username;
-        dropdown.appendChild(option);
-      }
-    });
-
-    // Auto-load initial view
-    if (dropdown.value) {
-      renderAgentHourlyBreakdown(dropdown.value);
+  users.forEach(user => {
+    if (user.role === "agent") {
+      const option = document.createElement("option");
+      option.value = user.username;
+      option.textContent = user.username;
+      dropdown.appendChild(option);
     }
   });
+
+  // Auto-load initial view
+  if (dropdown.value) {
+    renderAgentHourlyBreakdown(dropdown.value);
+  }
 }
+
 
 function populateUserManagementDropdown() {
   const dropdown = document.getElementById("manage-user-select");
   dropdown.innerHTML = "";
 
-  const usersRef = ref(db, "users");
+  const users = cachedUsers;
 
-  get(usersRef).then(snapshot => {
-    if (!snapshot.exists()) return;
-    const users = snapshot.val();
-
-    users.forEach(user => {
-      const option = document.createElement("option");
-      option.value = user.username;
-      option.textContent = user.username + " (" + user.role + ")";
-      dropdown.appendChild(option);
-    });
+  users.forEach(user => {
+    const option = document.createElement("option");
+    option.value = user.username;
+    option.textContent = `${user.username} (${user.role})`;
+    dropdown.appendChild(option);
   });
 }
 
