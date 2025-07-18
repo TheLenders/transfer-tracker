@@ -30,22 +30,7 @@
       });
     });
 
-    document.getElementById("submit-bug").addEventListener("click", () => {
-      const desc = document.getElementById("bug-description").value.trim();
-      if (!desc) return alert("Please describe the bug.");
-
-      const logs = JSON.parse(localStorage.getItem("supportLog")) || [];
-      logs.push({
-        type: "bug",
-        description: desc,
-        user: localStorage.getItem("username") || "Unknown",
-        time: new Date().toLocaleString()
-      });
-      localStorage.setItem("supportLog", JSON.stringify(logs));
-
-      alert("✅ Bug submitted.");
-      document.getElementById("bug-description").value = "";
-    });
+  
   });
 </script>
 
@@ -140,12 +125,13 @@
   <div id="manager-dashboard" style="display: none;">
     <button id="logout-btn-manager" style="float: right;">Logout</button>
     <h2>Manager Dashboard</h2>
+    <div class="card">
     <select id="manager-time-view" style="margin-bottom: 10px;">
       <option value="daily">Daily View</option>
       <option value="weekly">Weekly View</option>
       <option value="monthly">Monthly View</option>
     </select>
-
+    </div>
 
     <div class="card">
       <h3>Team Summary (Today)</h3>

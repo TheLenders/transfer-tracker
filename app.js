@@ -374,9 +374,11 @@ document.getElementById("transfer-date").addEventListener("change", function () 
   const username = localStorage.getItem("username");
 
   if (selectedDate !== today) {
-    const approved = JSON.parse(localStorage.getItem("approvedBackdates")) || [];
-    const allowed = approved.find(r => r.username === username && r.date === selectedDate);
-    document.getElementById("date-warning").style.display = allowed ? "none" : "block";
+    const approvedRef = ref(db, `approvedBackdates/${username}/${selectedDate}`);
+get(approvedRef).then(snap => {
+  const isApproved = snap.exists();
+  document.getElementById("date-warning").style.display = isApproved ? "none" : "block";
+});
   } else {
     document.getElementById("date-warning").style.display = "none";
   }
@@ -1186,7 +1188,8 @@ function renderAgentDashboardView(filter) {
     const badge = transfers.length >= 5 ? "🏅" : "";
 
     document.getElementById("transfer-count").textContent = transfers.length;
-    document.getElementById("dial-count").textContent = calls;
+    document.getElementById("dial-count").textContent = calls
+    
     document.getElementById("conversion-rate").textContent = conversion;
 
     const leaderboardBadge = document.querySelector("#leaderboard-body td:last-child");
@@ -1197,8 +1200,14 @@ function renderAgentDashboardView(filter) {
 }
 
 function renderManagerDashboardView(filter) {
+  
   console.log("🔄 Manager view changed:", filter);
-
+const summaryTitle = document.querySelector(".card h3");
+if (summaryTitle) {
+  if (filter === "weekly") summaryTitle.textContent = "Team Summary (This Week)";
+  else if (filter === "monthly") summaryTitle.textContent = "Team Summary (This Month)";
+  else summaryTitle.textContent = "Team Summary (Today)";
+}
   const { start, end } = getDateRange(filter);
 
   renderManagerSummaryFiltered(start, end);
@@ -1361,11 +1370,13 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   const managerTime = document.getElementById("manager-time-view");
-  if (managerTime) {
-    managerTime.addEventListener("change", function () {
-      renderManagerDashboardView(this.value);
-    });
-  }
+if (managerTime) {
+  managerTime.addEventListener("change", function () {
+    managerFilterState = this.value;
+    renderManagerDashboardView(this.value);
+  });
+}
+
 
   document.addEventListener("DOMContentLoaded", () => {
   const leaderboardBtn = document.getElementById("download-leaderboard-btn");
