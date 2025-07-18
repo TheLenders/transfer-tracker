@@ -626,113 +626,52 @@ function getDateRangeData(username, startDate, endDate) {
   });
 }
 
-function renderManagerLeaderboardFiltered(startDate, endDate) {
-  const agents = cachedUsers.filter(u => u.role === "agent");
+async function renderManagerLeaderboardFiltered(startDate, endDate) {
+  const data = await fetchManagerAgentData(startDate, endDate);
 
-  get(usersRef).then(snapshot => {
-    if (!snapshot.exists()) return;
+  const leaderboard = Object.entries(data).map(([username, stats]) => {
+    const { totalTransfers, totalCalls } = stats;
+    const conv = totalCalls > 0 ? ((totalTransfers / totalCalls) * 100).toFixed(1) + "%" : "0%";
+    return { username, transfers: totalTransfers, calls: totalCalls, conv };
+  });
 
-    const agents = snapshot.val().filter(u => u.role === "agent");
-    const leaderboard = [];
+  leaderboard.sort((a, b) => b.transfers - a.transfers);
 
-    // Create array of promises
-    const allAgentPromises = agents.map(agent => {
-      const username = agent.username;
-      let transferCount = 0;
-      let callCount = 0;
+  const tbody = document.getElementById("manager-leaderboard");
+  tbody.innerHTML = "";
 
-      const days = getDateRangeDays(startDate, endDate);
-
-      const dayPromises = days.map(date => {
-        const tRef = ref(db, `transfers/${username}/${date}`);
-        const cRef = ref(db, `calls/${username}/${date}`);
-        return Promise.all([get(tRef), get(cRef)]).then(([tSnap, cSnap]) => {
-          if (tSnap.exists()) transferCount += tSnap.val().length;
-          if (cSnap.exists()) callCount += cSnap.val();
-        });
-      });
-
-      return Promise.all(dayPromises).then(() => {
-        const conversion = callCount > 0 ? ((transferCount / callCount) * 100).toFixed(1) + "%" : "0%";
-        leaderboard.push({
-          username,
-          transfers: transferCount,
-          calls: callCount,
-          conv: conversion
-        });
-      });
-    });
-
-    // Once all agents are processed, render table
-    Promise.all(allAgentPromises).then(() => {
-      leaderboard.sort((a, b) => b.transfers - a.transfers);
-
-      const tbody = document.getElementById("manager-leaderboard");
-      tbody.innerHTML = "";
-
-      leaderboard.forEach((a, i) => {
-        const row = document.createElement("tr");
-        row.innerHTML = `
-          <td>${i + 1}</td>
-          <td>${a.username}</td>
-          <td>${a.transfers}</td>
-          <td>${a.calls}</td>
-          <td>${a.conv}</td>
-        `;
-        tbody.appendChild(row);
-      });
-    });
+  leaderboard.forEach((a, i) => {
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${i + 1}</td>
+      <td>${a.username}</td>
+      <td>${a.transfers}</td>
+      <td>${a.calls}</td>
+      <td>${a.conv}</td>
+    `;
+    tbody.appendChild(row);
   });
 }
 
-function renderManagerSummary() {
+async function renderManagerSummary() {
   const { start, end } = getDateRange(managerFilterState);
-  const users = cachedUsers.filter(u => u.role === "agent");
+  const data = await fetchManagerAgentData(start, end);
 
-  get(usersRef).then(snapshot => {
-    if (!snapshot.exists()) return;
-    const users = snapshot.val().filter(u => u.role === "agent");
+  let totalTransfers = 0;
+  let totalCalls = 0;
 
-    let totalTransfers = 0;
-    let totalCalls = 0;
-    let completed = 0;
-
-    users.forEach(user => {
-      const username = user.username;
-
-      const transferPromises = [];
-      const callPromises = [];
-
-      let date = new Date(start);
-      const endDate = new Date(end);
-
-      while (date <= endDate) {
-        const dateStr = date.toISOString().split("T")[0];
-        transferPromises.push(get(ref(db, `transfers/${username}/${dateStr}`)));
-        callPromises.push(get(ref(db, `calls/${username}/${dateStr}`)));
-        date.setDate(date.getDate() + 1);
-      }
-
-      Promise.all([...transferPromises, ...callPromises]).then(results => {
-        const transfers = results.slice(0, transferPromises.length).flatMap(snap => snap.exists() ? snap.val() : []);
-        const calls = results.slice(transferPromises.length).reduce((sum, snap) => {
-          return sum + (snap.exists() ? snap.val() : 0);
-        }, 0);
-
-        totalTransfers += transfers.length;
-        totalCalls += calls;
-
-        completed++;
-        if (completed === users.length) {
-          const avgConv = totalCalls > 0 ? ((totalTransfers / totalCalls) * 100).toFixed(1) + "%" : "0%";
-          document.getElementById("total-transfers").textContent = totalTransfers;
-          document.getElementById("total-calls").textContent = totalCalls;
-          document.getElementById("avg-conversion").textContent = avgConv;
-        }
-      });
-    });
+  Object.values(data).forEach(({ totalTransfers: t, totalCalls: c }) => {
+    totalTransfers += t;
+    totalCalls += c;
   });
+
+  const avgConv = totalCalls > 0 ? ((totalTransfers / totalCalls) * 100).toFixed(1) + "%" : "0%";
+
+  document.getElementById("total-transfers").textContent = totalTransfers;
+  document.getElementById("total-calls").textContent = totalCalls;
+  document.getElementById("avg-conversion").textContent = avgConv;
 }
+
 
 
 function getTransferCountsByHour(callback) {
@@ -1250,6 +1189,38 @@ function getDateRangeDays(start, end) {
     result.push(date.toISOString().slice(0, 10));
     date.setDate(date.getDate() + 1);
   }
+
+  return result;
+}
+
+async function fetchManagerAgentData(startDate, endDate) {
+  const agents = cachedUsers.filter(u => u.role === "agent");
+  const days = getDateRangeDays(startDate, endDate);
+
+  const result = {};
+
+  await Promise.all(
+    agents.map(async agent => {
+      let totalTransfers = 0;
+      let totalCalls = 0;
+
+      await Promise.all(
+        days.map(async date => {
+          const tRef = ref(db, `transfers/${agent.username}/${date}`);
+          const cRef = ref(db, `calls/${agent.username}/${date}`);
+          const [tSnap, cSnap] = await Promise.all([get(tRef), get(cRef)]);
+
+          if (tSnap.exists()) totalTransfers += tSnap.val().length;
+          if (cSnap.exists()) totalCalls += cSnap.val();
+        })
+      );
+
+      result[agent.username] = {
+        totalTransfers,
+        totalCalls
+      };
+    })
+  );
 
   return result;
 }
