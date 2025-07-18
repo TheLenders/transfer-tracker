@@ -1330,4 +1330,31 @@ document.addEventListener("DOMContentLoaded", () => {
       renderManagerDashboardView(this.value);
     });
   }
+
+  document.addEventListener("DOMContentLoaded", () => {
+  const leaderboardBtn = document.getElementById("download-leaderboard-btn");
+  if (leaderboardBtn) {
+    leaderboardBtn.addEventListener("click", async () => {
+      const { start, end } = getDateRange(managerFilterState);
+      const data = await fetchManagerAgentData(start, end);
+
+      let csv = "Agent,Transfers,Calls,Conversion (%)\n";
+      Object.entries(data).forEach(([username, stats]) => {
+        const conv = stats.totalCalls > 0
+          ? ((stats.totalTransfers / stats.totalCalls) * 100).toFixed(1)
+          : "0.0";
+        csv += `${username},${stats.totalTransfers},${stats.totalCalls},${conv}\n`;
+      });
+
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `leaderboard_${managerFilterState}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  }
+});
+
 });
