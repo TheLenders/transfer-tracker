@@ -17,7 +17,9 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 let cachedUsers = [];
+let appSettings = {};
 let managerFilterState = "daily"; // default to 'daily' on load
+
 
 function showDashboard(role) {
   const username = localStorage.getItem("username");
@@ -82,11 +84,19 @@ function loadSettings() {
     if (!snapshot.exists()) return;
     const settings = snapshot.val();
 
-    document.getElementById("setting-dial-goal").value = settings.dialGoal || "";
-    document.getElementById("setting-transfer-goal").value = settings.transferGoal || "";
-    document.getElementById("setting-badge-threshold").value = settings.badgeThreshold || "";
+    appSettings = settings; // ✅ Store globally
+
+    if (document.getElementById("setting-dial-goal"))
+      document.getElementById("setting-dial-goal").value = settings.dialGoal || "";
+
+    if (document.getElementById("setting-transfer-goal"))
+      document.getElementById("setting-transfer-goal").value = settings.transferGoal || "";
+
+    if (document.getElementById("setting-badge-threshold"))
+      document.getElementById("setting-badge-threshold").value = settings.badgeThreshold || "";
   });
 }
+
 
 
 
@@ -215,7 +225,7 @@ function populateScorecardDropdown() {
 
 function renderAgentScorecard(agentName) {
   const today = getToday();
-  const badgeThreshold = parseInt(document.getElementById("setting-badge-threshold").value) || 5;
+  const badgeThreshold = parseInt(appSettings.badgeThreshold) || 5;
 
   const transfersRef = ref(db, `transfers/${agentName}/${today}`);
   const callsRef = ref(db, `calls/${agentName}/${today}`);
@@ -224,7 +234,8 @@ function renderAgentScorecard(agentName) {
     const transfers = tSnap.exists() ? tSnap.val() : [];
     const calls = cSnap.exists() ? cSnap.val() : 0;
     const conv = calls > 0 ? ((transfers.length / calls) * 100).toFixed(1) + "%" : "0%";
-    const badge = transfers.length >= badgeThreshold ? "🏅" : "—";
+    const badgeThreshold = parseInt(appSettings.badgeThreshold) || 5;
+    const badge = transfers.length >= badgeThreshold ? "🏅" : "";
 
     document.getElementById("score-transfers").textContent = transfers.length;
     document.getElementById("score-dials").textContent = calls;
@@ -574,18 +585,27 @@ function renderLeaderboard() {
       completed++;
       if (completed === agentUsers.length) {
         rows.sort((a, b) => b.transfers - a.transfers);
-        rows.forEach((row, i) => {
-          const html = `
-            <tr>
-              <td>${i + 1}</td>
-              <td>${row.username}</td>
-              <td>${row.transfers}</td>
-              <td>${row.calls}</td>
-              <td>${row.conversion}</td>
-              <td>${row.badge}</td>
-            </tr>`;
-          leaderboardBody.innerHTML += html;
-        });
+
+const top5 = rows.slice(0, 5); // ✅ Only show top 5
+
+top5.forEach((row, i) => {
+  let rankIcon = "";
+  if (i === 0) rankIcon = "🥇 ";
+  else if (i === 1) rankIcon = "🥈 ";
+  else if (i === 2) rankIcon = "🥉 ";
+
+  const html = `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${rankIcon}${row.username}</td>
+      <td>${row.transfers}</td>
+      <td>${row.calls}</td>
+      <td>${row.conversion}</td>
+      <td>${row.badge}</td>
+    </tr>`;
+  leaderboardBody.innerHTML += html;
+});
+
       }
     }).catch(err => {
       console.error(`❌ Failed to load leaderboard data for ${user.username}:`, err);
@@ -640,17 +660,29 @@ async function renderManagerLeaderboardFiltered(startDate, endDate) {
   const tbody = document.getElementById("manager-leaderboard");
   tbody.innerHTML = "";
 
-  leaderboard.forEach((a, i) => {
-    const row = document.createElement("tr");
-    row.innerHTML = `
-      <td>${i + 1}</td>
-      <td>${a.username}</td>
-      <td>${a.transfers}</td>
-      <td>${a.calls}</td>
-      <td>${a.conv}</td>
-    `;
-    tbody.appendChild(row);
-  });
+  const badgeThreshold = parseInt(appSettings.badgeThreshold) || 5;
+
+const top5 = leaderboard.slice(0, 5); // ✅ Only top 5 agents
+
+top5.forEach((a, i) => {
+  let rankIcon = "";
+  if (i === 0) rankIcon = "🥇 ";
+  else if (i === 1) rankIcon = "🥈 ";
+  else if (i === 2) rankIcon = "🥉 ";
+
+  const badge = a.transfers >= badgeThreshold ? "🏅" : "";
+
+  const row = document.createElement("tr");
+  row.innerHTML = `
+    <td>${i + 1}</td>
+    <td>${rankIcon}${a.username}</td>
+    <td>${a.transfers}</td>
+    <td>${a.calls}</td>
+    <td>${a.conv} ${badge}</td>
+  `;
+  tbody.appendChild(row);
+});
+
 }
 
 async function renderManagerSummary() {
