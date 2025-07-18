@@ -1,71 +1,115 @@
 import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-database.js";
-import { db } from "./app.js"; // make sure this works depending on structure
+import { db } from "./app.js";
 
-const supportToggle = document.getElementById("support-toggle");
-const supportPanel = document.getElementById("support-panel");
-const tabButtons = document.querySelectorAll(".tab-btn");
-const tabContents = document.querySelectorAll(".tab-content");
+// 🧠 Chat + Bug Support Widget
+document.addEventListener("DOMContentLoaded", () => {
+  const supportToggle = document.getElementById("support-toggle");
+  const supportPanel = document.getElementById("support-panel");
+  const tabButtons = document.querySelectorAll(".tab-btn");
+  const tabContents = document.querySelectorAll(".tab-content");
 
-// 🧠 Toggle panel
-supportToggle.addEventListener("click", () => {
-  supportPanel.style.display = supportPanel.style.display === "none" ? "block" : "none";
-});
+  // Toggle panel
+  supportToggle.addEventListener("click", () => {
+    supportPanel.style.display = supportPanel.style.display === "none" ? "block" : "none";
+  });
 
-// 📁 Tab switching
-tabButtons.forEach(button => {
-  button.addEventListener("click", () => {
-    tabButtons.forEach(btn => btn.classList.remove("active"));
-    button.classList.add("active");
+  // Tab switching
+  tabButtons.forEach(button => {
+    button.addEventListener("click", () => {
+      tabButtons.forEach(btn => btn.classList.remove("active"));
+      button.classList.add("active");
 
-    tabContents.forEach(tab => {
-      tab.style.display = tab.id === "tab-" + button.dataset.tab ? "block" : "none";
+      tabContents.forEach(tab => {
+        tab.style.display = tab.id === "tab-" + button.dataset.tab ? "block" : "none";
+      });
     });
   });
-});
 
-// 🐞 Bug submission
-document.getElementById("submit-bug").addEventListener("click", () => {
-  const issue = document.getElementById("bug-description").value.trim();
-  if (!issue) return alert("Please describe the issue.");
+  // 🐞 Bug submission
+  document.getElementById("submit-bug").addEventListener("click", () => {
+    const issue = document.getElementById("bug-description").value.trim();
+    if (!issue) return alert("Please describe the issue.");
 
-  const username = localStorage.getItem("username") || "anonymous";
-  const timestamp = Date.now();
+    const username = localStorage.getItem("username") || "anonymous";
+    const timestamp = Date.now();
 
-  const bug = {
-    user: username,
-    issue,
-    timestamp,
-    page: location.href,
-    status: "open"
-  };
+    const bug = {
+      user: username,
+      issue,
+      timestamp,
+      page: location.href,
+      status: "open"
+    };
 
-  const bugRef = ref(db, `bugReports/${timestamp}`);
-  set(bugRef, bug).then(() => {
-    alert("🐞 Bug submitted. Thank you!");
-    document.getElementById("bug-description").value = "";
-  }).catch(err => {
-    console.error("Error submitting bug:", err);
-    alert("❌ Failed to submit bug.");
+    const bugRef = ref(db, `bugReports/${timestamp}`);
+    set(bugRef, bug).then(() => {
+      alert("🐞 Bug submitted. Thank you!");
+      document.getElementById("bug-description").value = "";
+    }).catch(err => {
+      console.error("❌ Error submitting bug:", err);
+      alert("❌ Failed to submit bug.");
+    });
   });
-});
 
-// 💬 Chat simulation (local only for now)
-const chatInput = document.getElementById("chat-input");
-const chatMessages = document.getElementById("chat-messages");
+  // 🧠 Chat Assistant
+  const chatInput = document.getElementById("chat-input");
+  const chatMessages = document.getElementById("chat-messages");
+  const sendBtn = document.getElementById("chat-send-btn"); // Optional button
+  let chatHistory = [];
 
-chatInput.addEventListener("keydown", e => {
-  if (e.key === "Enter" && chatInput.value.trim()) {
-    const msg = chatInput.value.trim();
-    chatInput.value = "";
+  if (!chatInput || !chatMessages) return;
 
+  chatInput.addEventListener("keydown", async (e) => {
+    if (e.key === "Enter" && chatInput.value.trim()) {
+      await handleChat(chatInput.value.trim());
+      chatInput.value = "";
+    }
+  });
+
+  if (sendBtn) {
+    sendBtn.addEventListener("click", async () => {
+      if (chatInput.value.trim()) {
+        await handleChat(chatInput.value.trim());
+        chatInput.value = "";
+      }
+    });
+  }
+
+  async function handleChat(msg) {
     appendChat("🧑", msg);
-    setTimeout(() => appendChat("🤖", "Thanks! We'll get back to you soon."), 600);
+    appendChat("🤖", "Thinking...");
+
+    chatHistory.push({ role: "user", content: msg });
+
+    try {
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer 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" // 🔐 Replace with real key // Replace with your working key
+        },
+        body: JSON.stringify({
+          model: "gpt-3.5-turbo",
+          messages: chatHistory,
+          temperature: 0.7
+        })
+      });
+
+      const data = await res.json();
+      const reply = data.choices?.[0]?.message?.content || "⚠️ No response.";
+
+      chatHistory.push({ role: "assistant", content: reply });
+      appendChat("🤖", reply);
+    } catch (err) {
+      console.error("❌ Chat error:", err);
+      appendChat("🤖", "⚠️ Error reaching assistant.");
+    }
+  }
+
+  function appendChat(sender, msg) {
+    const div = document.createElement("div");
+    div.innerHTML = `<strong>${sender}</strong>: ${msg}`;
+    chatMessages.appendChild(div);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
   }
 });
-
-function appendChat(sender, msg) {
-  const div = document.createElement("div");
-  div.textContent = `${sender} ${msg}`;
-  chatMessages.appendChild(div);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
-}

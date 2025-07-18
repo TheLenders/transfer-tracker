@@ -253,10 +253,13 @@
     </div>
 
     <div class="tab-content" id="tab-chat" style="display: none;">
-      <div id="chat-messages" style="height: 150px; overflow-y: auto;"></div>
-      <input type="text" id="chat-input" placeholder="Ask for help..." />
-    </div>
+  <div id="chat-messages" style="height: 150px; overflow-y: auto; margin-bottom: 5px;"></div>
+  <div style="display: flex; gap: 6px;">
+    <input type="text" id="chat-input" placeholder="Ask for help..." style="flex: 1;" />
+    <button id="chat-send-btn">Send</button>
   </div>
+</div>
+
 </div>
 <script type="module">
   import { getDatabase, ref, push } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-database.js";
