@@ -86,7 +86,7 @@ document.addEventListener("DOMContentLoaded", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": "Bearer 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" // 🔐 Replace with real key // Replace with your working key
+          "Authorization": "Bearer ",
         },
         body: JSON.stringify({
           model: "gpt-3.5-turbo",
