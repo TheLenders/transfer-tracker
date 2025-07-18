@@ -110,14 +110,14 @@ function saveSettings() {
   };
 
   set(settingsRef, newSettings).then(() => {
-  logAuditEntry("Update Settings", JSON.stringify(newSettings));
-  alert("✅ Settings saved!");
-}).catch(err => {
-  console.error("❌ Error saving settings:", err);
-  alert("❌ Failed to save settings.");
-});
-
+    logAuditEntry("Update Settings", JSON.stringify(newSettings));
+    alert("✅ Settings saved!");
+  }).catch(err => {
+    console.error("❌ Error saving settings:", err);
+    alert("❌ Failed to save settings.");
+  });
 }
+
 
 async function hashPassword(password) {
   const encoder = new TextEncoder();
@@ -553,8 +553,23 @@ function updateStats(transferCount) {
 
     document.getElementById("dial-count").textContent = dialCount;
     document.getElementById("conversion-rate").textContent = conversion;
-  }).catch(err => {
-    console.error("Error loading call count:", err);
+
+    // --- Add this for progress bars ---
+    const transferGoal = appSettings.transferGoal || 5;
+    const dialGoal = appSettings.dialGoal || 75;
+
+    const tProgress = document.getElementById("transfer-progress");
+
+    const dProgress = document.getElementById("dial-progress");
+
+    if (tProgress) {
+      tProgress.max = transferGoal;
+      tProgress.value = transferCount;
+    }
+    if (dProgress) {
+      dProgress.max = dialGoal;
+      dProgress.value = dialCount;
+    }
   });
 }
 
@@ -1380,42 +1395,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
 });
 
-const settingsRef = ref(db, "systemSettings");
-
-function loadSystemSettings() {
-  onValue(settingsRef, (snapshot) => {
-    const settings = snapshot.val();
-    if (settings) {
-      document.getElementById("setting-dial-goal").value = settings.dialGoal || "";
-      document.getElementById("setting-transfer-goal").value = settings.transferGoal || "";
-      document.getElementById("setting-badge-threshold").value = settings.badgeThreshold || "";
-    }
-  });
-}
-
-const saveSettingsBtn = document.getElementById("save-settings-btn");
-if (saveSettingsBtn) {
-  saveSettingsBtn.addEventListener("click", () => {
-    const dialGoal = parseInt(document.getElementById("setting-dial-goal").value) || 0;
-    const transferGoal = parseInt(document.getElementById("setting-transfer-goal").value) || 0;
-    const badgeThreshold = parseInt(document.getElementById("setting-badge-threshold").value) || 0;
-
-    const newSettings = {
-      dialGoal,
-      transferGoal,
-      badgeThreshold
-    };
-
-    set(settingsRef, newSettings)
-      .then(() => alert("✅ Settings saved!"))
-      .catch((err) => {
-        console.error("Failed to save settings:", err);
-        alert("❌ Failed to save settings.");
-      });
-  });
-}
-
-// Load settings once manager dashboard appears
 if (document.getElementById("manager-dashboard")) {
-  loadSystemSettings();
+  loadSettings();
 }
