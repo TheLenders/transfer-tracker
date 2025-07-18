@@ -225,7 +225,12 @@
       <button id="download-audit-btn">Download Audit CSV</button>
     </div>
   </div>
+<footer id="site-footer" style="text-align: center; padding: 20px; font-size: 14px; color: #888;">
+  <p>© 2025 Dmitriy Klein. All rights reserved.</p>
+  <a href="#" id="privacy-link" onclick="document.getElementById('privacy-modal').style.display='block'">Privacy Policy</a> |
+  <a href="#" id="terms-link" onclick="document.getElementById('terms-modal').style.display='block'">Terms of Use</a>
 
+</footer>
   <!-- Load your main script LAST -->
   <script type="module" src="app.js"></script>
   <!-- 🧠 AI Chat Assistant -->
@@ -297,5 +302,39 @@
   }
 </script>
 
+<!-- Privacy Policy Modal -->
+<div id="privacy-modal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <span class="close" onclick="document.getElementById('privacy-modal').style.display='none'">&times;</span>
+    <h2>Privacy Policy</h2>
+    <p>This internal tool is used solely by authorized Lending Force team members. We collect and store limited data such as usernames, client names, and phone numbers for operational purposes.</p>
+    <ul>
+      <li>All data is stored securely in a private Firebase Realtime Database.</li>
+      <li>Phone numbers and names are only visible to managers and authorized staff.</li>
+      <li>Data is never shared outside of Lending Force.</li>
+      <li>Password hashing is applied for secure authentication.</li>
+    </ul>
+    <p>By using this tool, you consent to the internal use and storage of your data as described above.</p>
+  </div>
+</div>
+<!-- Terms of Use Modal -->
+<div id="terms-modal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <span class="close" onclick="document.getElementById('terms-modal').style.display='none'">&times;</span>
+    <h2>Terms of Use</h2>
+    <p>This tool is intended strictly for internal use by Lending Force employees. Unauthorized access, misuse, or data extraction is prohibited.</p>
+    <ul>
+      <li>All activity is logged and monitored via the audit system.</li>
+      <li>Agents may only enter real, verified client information they personally collected.</li>
+      <li>Managers must review any backdated data or override requests.</li>
+      <li>By using this tool, you agree to treat all data with confidentiality and professionalism.</li>
+    </ul>
+    <p>Violation of these terms may result in disciplinary action and data removal.</p>
+  </div>
+</div>
+
+
 </body>
+
+
 </html>
