@@ -128,7 +128,7 @@ async function hashPassword(password) {
 }
 
 // Button listener
-//document.getElementById("save-settings-btn").addEventListener("click", saveSettings);
+document.getElementById("save-settings-btn").addEventListener("click", saveSettings);
 
 
 
@@ -510,11 +510,19 @@ function renderTransfers() {
   get(transferRef).then(snapshot => {
     const transfers = snapshot.exists() ? snapshot.val() : [];
 
-    transfers.forEach(t => {
-      const li = document.createElement("li");
-      li.textContent = `${t.client} – ${t.phone} → ${t.banker} (${t.loanPurpose})`;
-      transferList.appendChild(li);
-    });
+    if (transfers.length === 0) {
+  const li = document.createElement("li");
+  li.style.color = "#888";
+  li.style.textAlign = "center";
+  li.textContent = "No transfers submitted yet.";
+  transferList.appendChild(li);
+} else {
+  transfers.forEach(t => {
+    const li = document.createElement("li");
+    li.textContent = `${t.client} – ${t.phone} → ${t.banker} (${t.loanPurpose})`;
+    transferList.appendChild(li);
+  });
+}
 
     document.getElementById("transfer-count").textContent = transfers.length;
     updateStats(transfers.length);
@@ -588,6 +596,18 @@ function renderLeaderboard() {
 
 const top5 = rows.slice(0, 5); // ✅ Only show top 5
 
+leaderboardBody.innerHTML = "";
+
+if (top5.length === 0) {
+  leaderboardBody.innerHTML = `
+    <tr>
+      <td colspan="6" style="text-align: center; color: #888;">
+        No transfers logged today.
+      </td>
+    </tr>`;
+  return;
+}
+
 top5.forEach((row, i) => {
   let rankIcon = "";
   if (i === 0) rankIcon = "🥇 ";
@@ -605,6 +625,7 @@ top5.forEach((row, i) => {
     </tr>`;
   leaderboardBody.innerHTML += html;
 });
+
 
       }
     }).catch(err => {

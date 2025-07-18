@@ -166,11 +166,27 @@
     <div class="card">
       <h3>Admin Panel</h3>
 
+        <div class="card">
+    <h3>System Settings</h3>
+
+    <label for="setting-dial-goal">Daily Call Goal:</label><br />
+    <input type="number" id="setting-dial-goal" placeholder="e.g. 75" /><br /><br />
+
+    <label for="setting-transfer-goal">Daily Transfer Goal:</label><br />
+    <input type="number" id="setting-transfer-goal" placeholder="e.g. 5" /><br /><br />
+
+    <label for="setting-badge-threshold">Badge Threshold:</label><br />
+    <input type="number" id="setting-badge-threshold" placeholder="e.g. 5" /><br /><br />
+
+    <button id="save-settings-btn">Save Settings</button>
+  </div>
+    <div class="card">
       <h4 style="margin-top: 20px;">Override Call Counts (Today)</h4>
       <select id="override-agent-select"></select><br /><br />
       <input type="number" id="override-dials" placeholder="Enter new call count" />
       <button id="override-save-btn">Save Override</button>
-
+    </div>
+    <div class="card">
       <h4 style="margin-top: 30px;">Create New User Account</h4>
       <input type="text" id="new-user-name" placeholder="Username" /><br />
       <input type="password" id="new-user-pass" placeholder="Password" /><br />
@@ -179,6 +195,7 @@
         <option value="manager">Manager</option>
       </select><br /><br />
       <button id="create-user-btn">Create Account</button>
+      </div>
 
       <div class="card">
         <h3>User Account Management</h3>
