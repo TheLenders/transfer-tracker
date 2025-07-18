@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
-import { getDatabase, ref, get, set } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-database.js";
+import { getDatabase, ref, set, onValue, get } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-database.js";
 
 
 // Firebase config
@@ -15,7 +15,7 @@ const firebaseConfig = {
 
 // ✅ New style initialization
 const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+export const db = getDatabase(app);
 let cachedUsers = [];
 let appSettings = {};
 let managerFilterState = "daily"; // default to 'daily' on load
@@ -1379,3 +1379,43 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 });
+
+const settingsRef = ref(db, "systemSettings");
+
+function loadSystemSettings() {
+  onValue(settingsRef, (snapshot) => {
+    const settings = snapshot.val();
+    if (settings) {
+      document.getElementById("setting-dial-goal").value = settings.dialGoal || "";
+      document.getElementById("setting-transfer-goal").value = settings.transferGoal || "";
+      document.getElementById("setting-badge-threshold").value = settings.badgeThreshold || "";
+    }
+  });
+}
+
+const saveSettingsBtn = document.getElementById("save-settings-btn");
+if (saveSettingsBtn) {
+  saveSettingsBtn.addEventListener("click", () => {
+    const dialGoal = parseInt(document.getElementById("setting-dial-goal").value) || 0;
+    const transferGoal = parseInt(document.getElementById("setting-transfer-goal").value) || 0;
+    const badgeThreshold = parseInt(document.getElementById("setting-badge-threshold").value) || 0;
+
+    const newSettings = {
+      dialGoal,
+      transferGoal,
+      badgeThreshold
+    };
+
+    set(settingsRef, newSettings)
+      .then(() => alert("✅ Settings saved!"))
+      .catch((err) => {
+        console.error("Failed to save settings:", err);
+        alert("❌ Failed to save settings.");
+      });
+  });
+}
+
+// Load settings once manager dashboard appears
+if (document.getElementById("manager-dashboard")) {
+  loadSystemSettings();
+}
