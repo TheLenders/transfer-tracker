@@ -341,28 +341,25 @@ if (logoutManager) {
 }
 
 // === ON LOAD ===
-window.addEventListener("DOMContentLoaded", function () {
+window.addEventListener("DOMContentLoaded", async function () {
   const loggedIn = localStorage.getItem("isLoggedIn");
   const role = localStorage.getItem("role");
   const username = localStorage.getItem("username");
 
-  // ⛔ First block showDashboard unless user is logged in
   if (!loggedIn || !role || !username) return;
 
-  // 🔒 Validate session BEFORE showing dashboard
+  await cacheUsersOnce(); // 🧠 ensures cachedUsers is populated
+
   getUsers(users => {
     const real = users.find(u => u.username === username);
 
     if (!real || real.role !== role) {
-      console.warn("🚨 Spoofed role detected. Logging out.");
       alert("Invalid session. You've been logged out.");
       localStorage.clear();
-      // ✅ Don't reload — just stop execution
       return;
     }
 
-    // ✅ If all checks pass
-    showDashboard(role);
+    showDashboard(role); // ✅ Safe to proceed
   });
 });
 
@@ -955,6 +952,14 @@ function populateAnalyticsDropdown() {
   }
 }
 
+function refreshAllUserDropdowns() {
+  cacheUsersOnce().then(() => {
+    populateUserManagementDropdown();
+    populateOverrideDropdown();
+    populateAnalyticsDropdown();
+    populateScorecardDropdown();
+  });
+}
 
 function populateUserManagementDropdown() {
   const dropdown = document.getElementById("manage-user-select");
@@ -969,6 +974,7 @@ function populateUserManagementDropdown() {
     dropdown.appendChild(option);
   });
 }
+
 
 
 function renderAgentHourlyBreakdown(agentName) {
@@ -1103,7 +1109,9 @@ document.getElementById("create-user-btn").addEventListener("click", () => {
       users.push({ username, passwordHash, role });
       saveUsers(users);
       logAuditEntry("Create Account", `Username: ${username}, Role: ${role}`);
-      alert("User created.");
+      refreshAllUserDropdowns();
+      alert("✅ User created and dropdowns updated.");
+
     });
   });
 }); // ✅ <<< ADD THIS LINE
@@ -1125,6 +1133,7 @@ document.getElementById("reset-pass-btn").addEventListener("click", function () 
       saveUsers(users);
       logAuditEntry("Reset Password", `User: ${user}`);
       alert("Password reset.");
+      refreshAllUserDropdowns();
       document.getElementById("reset-user-pass").value = "";
     });
   });
@@ -1142,8 +1151,8 @@ document.getElementById("change-role-btn").addEventListener("click", function ()
     u.role = newRole;
     saveUsers(users);
     logAuditEntry("Change Role", `User: ${user}, New Role: ${newRole}`);
-    alert("Role updated.");
-    populateUserManagementDropdown();
+    refreshAllUserDropdowns();
+    alert("✅ Role updated and dropdowns refreshed.");
   });
 });
 
@@ -1155,8 +1164,8 @@ document.getElementById("delete-user-btn").addEventListener("click", function ()
     users = users.filter(u => u.username !== user);
     saveUsers(users);
     logAuditEntry("Delete User", `User: ${user}`);
-    alert("User deleted.");
-    populateUserManagementDropdown();
+    refreshAllUserDropdowns();
+    alert("✅ User deleted and dropdowns updated.");
   });
 });
 
