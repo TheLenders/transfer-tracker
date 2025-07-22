@@ -1,6 +1,13 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 import { getDatabase, ref, set, onValue, get } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-database.js";
 import { initAuthEvents, restoreSessionIfNeeded } from "./modules/auth.js";
+import { getToday, getDateRange } from "./modules/utils.js";
+import {
+  renderTransfers,
+  updateStats,
+  renderLeaderboard,
+  renderAgentDashboardView
+} from "./modules/agentDashboard.js";
 
 
 // Firebase config
@@ -14,12 +21,11 @@ const firebaseConfig = {
   measurementId: "G-8PZFFB6XSM"
 };
 
-// ✅ New style initialization
-const appState = {
-  cachedUsers: [],
-  appSettings: {}, // ✅ correct
-  managerFilterState: "daily"
-};
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+import { appState } from "./modules/state.js";
+
 
 function showDashboard(role) {
   const username = localStorage.getItem("username");
@@ -60,7 +66,7 @@ function showDashboard(role) {
     if (user.role === "manager") {
       dashboardManager.style.display = "block";
 
-      const today = getToday();
+    
       renderManagerLeaderboardFiltered(today, today);
       renderManagerSummary();
       populateOverrideDropdown();
@@ -224,7 +230,6 @@ function populateScorecardDropdown() {
 }
 
 function renderAgentScorecard(agentName) {
-  const today = getToday();
   const badgeThreshold = parseInt(appState.appSettings.badgeThreshold) || 5;
 
   const transfersRef = ref(db, `transfers/${agentName}/${today}`);
@@ -278,274 +283,6 @@ get(approvedRef).then(snap => {
     document.getElementById("date-warning").style.display = "none";
   }
 });
-
-// === SUBMIT TRANSFER ===
-document.getElementById("submit-transfer").addEventListener("click", async function () {
-  const selectedDate = document.getElementById("transfer-date").value || new Date().toISOString().slice(0, 10);
-  const today = new Date().toISOString().slice(0, 10);
-  const username = localStorage.getItem("username");
-
-  if (selectedDate !== today) {
-  const approvedRef = ref(db, `approvedBackdates/${username}/${selectedDate}`);
-  const approvedSnap = await get(approvedRef);
-  const isApproved = approvedSnap.exists();
-
-  if (!isApproved) {
-    alert("Backdated transfer not approved by manager.");
-    return;
-  }
-}
-
-  const client = document.getElementById("client-name");
-  const phone = document.getElementById("client-phone");
-  const banker = document.getElementById("banker");
-  const loanPurpose = document.getElementById("loan-purpose");
-  const notes = document.getElementById("notes");
-
-  // Basic validation
-  let valid = true;
-
-  [client, phone, banker, loanPurpose].forEach(el => {
-    el.classList.remove("invalid");
-    if (!el.value.trim() || (el === phone && el.value.replace(/\D/g, "").length !== 10)) {
-      el.classList.add("invalid");
-      valid = false;
-    }
-  });
-
-  if (!valid) {
-    alert("⚠️ Please fill in all required fields correctly.");
-    return;
-  }
-
-  const transfer = {
-    agent: username,
-    client: client.value.trim(),
-    phone: phone.value.trim(),
-    banker: banker.value.trim(),
-    loanPurpose: loanPurpose.value.trim(),
-    notes: notes.value.trim(),
-    timestamp: new Date().toISOString(),
-  };
-
-  saveTransferToFirebase(username, selectedDate, transfer);
-
-  // Clear fields
-  client.value = "";
-  phone.value = "";
-  banker.value = "";
-  loanPurpose.value = "";
-  notes.value = "";
-
-  renderTransfers();
-  updateStats();
-  renderLeaderboard();
-});
-
-
-// === SUBMIT DIALS ===
-document.getElementById("submit-calls").addEventListener("click", function () {
-  const calls = parseInt(document.getElementById("call-input").value);
-  if (!isNaN(calls) && calls >= 0) {
-    const today = getToday();
-    const username = localStorage.getItem("username");
-
-    const callsRef = ref(db, `calls/${username}/${today}`);
-    set(callsRef, calls).then(() => {
-      logAuditEntry("Update Call Count", `Count: ${calls}`);
-      document.getElementById("dial-count").textContent = calls;
-      updateStats();
-      renderLeaderboard();
-      alert("✅ Call count saved!");
-    }).catch(error => {
-      console.error("❌ Error saving calls to Firebase:", error);
-      alert("❌ Failed to save call count. Try again.");
-    });
-  } else {
-    alert("⚠️ Please enter a valid number of calls.");
-  }
-});
-
-function getDateRange(filterType) {
-  const today = new Date();
-  let start, end;
-
-  if (filterType === "daily") {
-    start = end = today.toISOString().split("T")[0];
-  } else if (filterType === "weekly") {
-    const day = today.getDay(); // 0 (Sun) - 6 (Sat)
-    const diffToMonday = day === 0 ? 6 : day - 1;
-    const monday = new Date(today);
-    monday.setDate(today.getDate() - diffToMonday);
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    start = monday.toISOString().split("T")[0];
-    end = sunday.toISOString().split("T")[0];
-  } else if (filterType === "monthly") {
-    const first = new Date(today.getFullYear(), today.getMonth(), 1);
-    const last = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-    start = first.toISOString().split("T")[0];
-    end = last.toISOString().split("T")[0];
-  }
-
-  return { start, end };
-}
-
-
-function getToday() {
-  return new Date().toISOString().split("T")[0];
-}
-
-// === RENDER TRANSFERS ===
-function renderTransfers() {
-  const username = localStorage.getItem("username");
-  const selectedDate = document.getElementById("transfer-date").value || getToday();
-  const transferList = document.getElementById("transfer-list");
-  transferList.innerHTML = "";
-
-  const transferRef = ref(db, `transfers/${username}/${selectedDate}`);
-  get(transferRef).then(snapshot => {
-    const transfers = snapshot.exists() ? snapshot.val() : [];
-
-    if (transfers.length === 0) {
-  const li = document.createElement("li");
-  li.style.color = "#888";
-  li.style.textAlign = "center";
-  li.textContent = "No transfers submitted yet.";
-  transferList.appendChild(li);
-} else {
-  transfers.forEach(t => {
-    const li = document.createElement("li");
-    li.textContent = `${t.client} – ${t.phone} → ${t.banker} (${t.loanPurpose})`;
-    transferList.appendChild(li);
-  });
-}
-
-    document.getElementById("transfer-count").textContent = transfers.length;
-    updateStats(transfers.length);
-  }).catch(err => {
-    console.error("Error loading transfers:", err);
-  });
-}
-
-document.getElementById("client-phone").addEventListener("keydown", function (e) {
-  if (e.key === "Enter") {
-    const raw = this.value.replace(/\D/g, ""); // remove all non-digits
-    if (raw.length === 10) {
-      const formatted = `(${raw.slice(0,3)}) ${raw.slice(3,6)}-${raw.slice(6)}`;
-      this.value = formatted;
-    }
-  }
-});
-
-// === UPDATE STATS ===
-function updateStats(transferCount) {
-  const username = localStorage.getItem("username");
-  const today = getToday();
-  const callsRef = ref(db, `calls/${username}/${today}`);
-
-  get(callsRef).then(snapshot => {
-    const dialCount = snapshot.exists() ? snapshot.val() : 0;
-    const conversion = dialCount > 0 ? ((transferCount / dialCount) * 100).toFixed(1) + "%" : "0%";
-
-    document.getElementById("dial-count").textContent = dialCount;
-    document.getElementById("conversion-rate").textContent = conversion;
-
-    // --- Add this for progress bars ---
-    const transferGoal = appState.appSettings.transferGoal || 5;
-    const dialGoal = appState.appSettings.dialGoal || 75;
-
-    const tProgress = document.getElementById("transfer-progress");
-
-    const dProgress = document.getElementById("dial-progress");
-
-    if (tProgress) {
-      tProgress.max = transferGoal;
-      tProgress.value = transferCount;
-    }
-    if (dProgress) {
-      dProgress.max = dialGoal;
-      dProgress.value = dialCount;
-    }
-  });
-}
-
-
-// === RENDER AGENT LEADERBOARD ===
-function renderLeaderboard() {
-  const today = getToday();
-  const leaderboardBody = document.getElementById("leaderboard-body");
-  if (!leaderboardBody) return;
-  leaderboardBody.innerHTML = "";
-
-  const users = appState.cachedUsers;
-  const rows = [];
-
-  const agentUsers = users.filter(user => user.role === "agent");
-  let completed = 0;
-
-  for (const user of agentUsers) {
-    const transferRef = ref(db, `transfers/${user.username}/${today}`);
-    const callsRef = ref(db, `calls/${user.username}/${today}`);
-
-    Promise.all([get(transferRef), get(callsRef)]).then(([tSnap, cSnap]) => {
-      const transfers = tSnap.exists() ? tSnap.val() : [];
-      const calls = cSnap.exists() ? cSnap.val() : 0;
-      const conversion = calls > 0 ? ((transfers.length / calls) * 100).toFixed(1) + "%" : "0%";
-      const badge = transfers.length >= 5 ? "🏅" : "";
-
-      rows.push({
-        username: user.username,
-        transfers: transfers.length,
-        calls,
-        conversion,
-        badge
-      });
-
-      completed++;
-      if (completed === agentUsers.length) {
-        rows.sort((a, b) => b.transfers - a.transfers);
-
-const top5 = rows.slice(0, 5); // ✅ Only show top 5
-
-leaderboardBody.innerHTML = "";
-
-if (top5.length === 0) {
-  leaderboardBody.innerHTML = `
-    <tr>
-      <td colspan="6" style="text-align: center; color: #888;">
-        No transfers logged today.
-      </td>
-    </tr>`;
-  return;
-}
-
-top5.forEach((row, i) => {
-  let rankIcon = "";
-  if (i === 0) rankIcon = "🥇 ";
-  else if (i === 1) rankIcon = "🥈 ";
-  else if (i === 2) rankIcon = "🥉 ";
-
-  const html = `
-    <tr>
-      <td>${i + 1}</td>
-      <td>${rankIcon}${row.username}</td>
-      <td>${row.transfers}</td>
-      <td>${row.calls}</td>
-      <td>${row.conversion}</td>
-      <td>${row.badge}</td>
-    </tr>`;
-  leaderboardBody.innerHTML += html;
-});
-
-
-      }
-    }).catch(err => {
-      console.error(`❌ Failed to load leaderboard data for ${user.username}:`, err);
-    });
-  }
-}
-
 
 // === MANAGER FUNCTIONS ===
 function getDateRangeData(username, startDate, endDate) {
@@ -1061,44 +798,6 @@ document.getElementById("delete-user-btn").addEventListener("click", function ()
 });
 
 
-function renderAgentDashboardView(filter) {
-  const username = localStorage.getItem("username");
-  const { start, end } = getDateRange(filter);
-
-  const transferPromises = [];
-  const callPromises = [];
-
-  let date = new Date(start);
-  const endDate = new Date(end);
-
-  while (date <= endDate) {
-    const dateStr = date.toISOString().split("T")[0];
-    transferPromises.push(get(ref(db, `transfers/${username}/${dateStr}`)));
-    callPromises.push(get(ref(db, `calls/${username}/${dateStr}`)));
-    date.setDate(date.getDate() + 1);
-  }
-
-  Promise.all([...transferPromises, ...callPromises]).then(results => {
-    const transfers = results.slice(0, transferPromises.length).flatMap(snap => snap.exists() ? snap.val() : []);
-    const calls = results.slice(transferPromises.length).reduce((sum, snap) => {
-      return sum + (snap.exists() ? snap.val() : 0);
-    }, 0);
-
-    const conversion = calls > 0 ? ((transfers.length / calls) * 100).toFixed(1) + "%" : "0%";
-    const badge = transfers.length >= 5 ? "🏅" : "";
-
-    document.getElementById("transfer-count").textContent = transfers.length;
-    document.getElementById("dial-count").textContent = calls
-    
-    document.getElementById("conversion-rate").textContent = conversion;
-
-    const leaderboardBadge = document.querySelector("#leaderboard-body td:last-child");
-    if (leaderboardBadge) leaderboardBadge.textContent = badge;
-  }).catch(err => {
-    console.error("❌ Agent view error:", err);
-  });
-}
-
 function renderManagerDashboardView(filter) {
   
   console.log("🔄 Manager view changed:", filter);
@@ -1108,7 +807,6 @@ if (summaryTitle) {
   else if (filter === "monthly") summaryTitle.textContent = "Team Summary (This Month)";
   else summaryTitle.textContent = "Team Summary (Today)";
 }
-  const { start, end } = getDateRange(filter);
 
   renderManagerSummaryFiltered(start, end);
   renderManagerLeaderboardFiltered(start, end);
@@ -1201,11 +899,6 @@ async function fetchManagerAgentData(startDate, endDate) {
 
   return result;
 }
-
-if (document.getElementById("manager-dashboard")) {
-  loadSettings();
-}
-
 
 document.addEventListener("DOMContentLoaded", initializeApp);
 
