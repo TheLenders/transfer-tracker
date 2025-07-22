@@ -1,5 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 import { getDatabase, ref, set, onValue, get } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-database.js";
+import { initAuthEvents, restoreSessionIfNeeded } from "./modules/auth.js";
 
 
 // Firebase config
@@ -14,12 +15,11 @@ const firebaseConfig = {
 };
 
 // ✅ New style initialization
-const app = initializeApp(firebaseConfig);
-export const db = getDatabase(app);
-let cachedUsers = [];
-let appSettings = {};
-let managerFilterState = "daily"; // default to 'daily' on load
-
+const appState = {
+  cachedUsers: [],
+  appSettings: {}, // ✅ correct
+  managerFilterState: "daily"
+};
 
 function showDashboard(role) {
   const username = localStorage.getItem("username");
@@ -84,7 +84,7 @@ function loadSettings() {
     if (!snapshot.exists()) return;
     const settings = snapshot.val();
 
-    appSettings = settings; // ✅ Store globally
+    appState.appSettings = settings; // ✅ Store globally
 
     if (document.getElementById("setting-dial-goal"))
       document.getElementById("setting-dial-goal").value = settings.dialGoal || "";
@@ -145,13 +145,13 @@ async function cacheUsersOnce() {
   try {
     const snapshot = await get(ref(db, "users"));
     if (snapshot.exists()) {
-      cachedUsers = snapshot.val();
+      appState.cachedUsers = snapshot.val();
     } else {
-      cachedUsers = [];
+      appState.cachedUsers = [];
     }
   } catch (error) {
     console.error("❌ Failed to cache users:", error);
-    cachedUsers = [];
+    appState.cachedUsers = [];
   }
 }
 function saveUsersToFirebase(users) {
@@ -160,7 +160,7 @@ function saveUsersToFirebase(users) {
 
 
 function getUsers(callback) {
-  callback(cachedUsers);
+  callback(appState.cachedUsers);
 }
 
 function saveUsers(users) {
@@ -207,7 +207,7 @@ function populateScorecardDropdown() {
   const dropdown = selectEl;
   dropdown.innerHTML = "";
 
-  const users = cachedUsers;
+  const users = appState.cachedUsers;
 
   const agents = users.filter(u => u.role === "agent");
   agents.forEach(user => {
@@ -225,7 +225,7 @@ function populateScorecardDropdown() {
 
 function renderAgentScorecard(agentName) {
   const today = getToday();
-  const badgeThreshold = parseInt(appSettings.badgeThreshold) || 5;
+  const badgeThreshold = parseInt(appState.appSettings.badgeThreshold) || 5;
 
   const transfersRef = ref(db, `transfers/${agentName}/${today}`);
   const callsRef = ref(db, `calls/${agentName}/${today}`);
@@ -234,7 +234,7 @@ function renderAgentScorecard(agentName) {
     const transfers = tSnap.exists() ? tSnap.val() : [];
     const calls = cSnap.exists() ? cSnap.val() : 0;
     const conv = calls > 0 ? ((transfers.length / calls) * 100).toFixed(1) + "%" : "0%";
-    const badgeThreshold = parseInt(appSettings.badgeThreshold) || 5;
+    const badgeThreshold = parseInt(appState.appSettings.badgeThreshold) || 5;
     const badge = transfers.length >= badgeThreshold ? "🏅" : "";
 
     document.getElementById("score-transfers").textContent = transfers.length;
@@ -261,108 +261,6 @@ function renderAgentScorecard(agentName) {
     }
   });
 }
-
-document.addEventListener("DOMContentLoaded", () => {
-  const toggle = document.getElementById("chatbot-toggle");
-  const box = document.getElementById("chatbot-container");
-  const input = document.getElementById("chatbot-input");
-  const messages = document.getElementById("chatbot-messages");
-
-  if (toggle && box && input && messages) {
-    let chatHistory = [];
-
-    toggle.addEventListener("click", () => {
-      box.style.display = "block";
-      toggle.style.display = "none";
-    });
-
-    document.getElementById("chatbot-close").addEventListener("click", () => {
-      box.style.display = "none";
-      toggle.style.display = "block";
-    });
-
-    document.getElementById("chatbot-send").addEventListener("click", () => {
-      const userMessage = input.value.trim();
-      if (!userMessage) return;
-
-      const userBubble = document.createElement("div");
-      userBubble.textContent = "🧑 " + userMessage;
-      messages.appendChild(userBubble);
-      input.value = "";
-
-      const botBubble = document.createElement("div");
-      botBubble.textContent = "🤖 Let me think...";
-      messages.appendChild(botBubble);
-
-      messages.scrollTop = messages.scrollHeight;
-    });
-  }
-});
-// === LOGIN ===
-
-document.getElementById("login-btn").addEventListener("click", () => {
-  handleLogin();
-});
-
-async function handleLogin() {
-  const username = document.getElementById("username").value.trim();
-  const password = document.getElementById("password").value;
-
-  const hashedInput = await hashPassword(password);
-
-  await cacheUsersOnce(); // ✅ this line is now valid
-  const user = cachedUsers.find(u => u.username === username && u.passwordHash === hashedInput);
-  if (!user) return alert("Invalid login.");
-
-  localStorage.setItem("username", user.username);
-  localStorage.setItem("role", user.role);
-  localStorage.setItem("isLoggedIn", true);
-
-  logAuditEntry("Login", `Role: ${user.role}`);
-  showDashboard(user.role);
-}
-
-
-
-
-// === LOGOUTS ===
-document.getElementById("logout-btn").addEventListener("click", () => {
-  localStorage.clear();
-  location.reload();
-});
-
-const logoutManager = document.getElementById("logout-btn-manager");
-if (logoutManager) {
-  logoutManager.addEventListener("click", () => {
-    logAuditEntry("Logout", "");
-    localStorage.clear();
-    location.reload();
-  });
-}
-
-// === ON LOAD ===
-window.addEventListener("DOMContentLoaded", async function () {
-  const loggedIn = localStorage.getItem("isLoggedIn");
-  const role = localStorage.getItem("role");
-  const username = localStorage.getItem("username");
-
-  if (!loggedIn || !role || !username) return;
-
-  await cacheUsersOnce(); // 🧠 ensures cachedUsers is populated
-
-  getUsers(users => {
-    const real = users.find(u => u.username === username);
-
-    if (!real || real.role !== role) {
-      alert("Invalid session. You've been logged out.");
-      localStorage.clear();
-      return;
-    }
-
-    showDashboard(role); // ✅ Safe to proceed
-  });
-});
-
 
 // === BACKDATE SELECTOR ===
 document.getElementById("transfer-date").addEventListener("change", function () {
@@ -554,8 +452,8 @@ function updateStats(transferCount) {
     document.getElementById("conversion-rate").textContent = conversion;
 
     // --- Add this for progress bars ---
-    const transferGoal = appSettings.transferGoal || 5;
-    const dialGoal = appSettings.dialGoal || 75;
+    const transferGoal = appState.appSettings.transferGoal || 5;
+    const dialGoal = appState.appSettings.dialGoal || 75;
 
     const tProgress = document.getElementById("transfer-progress");
 
@@ -580,7 +478,7 @@ function renderLeaderboard() {
   if (!leaderboardBody) return;
   leaderboardBody.innerHTML = "";
 
-  const users = cachedUsers;
+  const users = appState.cachedUsers;
   const rows = [];
 
   const agentUsers = users.filter(user => user.role === "agent");
@@ -695,7 +593,7 @@ async function renderManagerLeaderboardFiltered(startDate, endDate) {
   const tbody = document.getElementById("manager-leaderboard");
   tbody.innerHTML = "";
 
-  const badgeThreshold = parseInt(appSettings.badgeThreshold) || 5;
+  const badgeThreshold = parseInt(appState.appSettings.badgeThreshold) || 5;
 
 const top5 = leaderboard.slice(0, 5); // ✅ Only top 5 agents
 
@@ -721,7 +619,7 @@ top5.forEach((a, i) => {
 }
 
 async function renderManagerSummary() {
-  const { start, end } = getDateRange(managerFilterState);
+  const { start, end } = getDateRange(appState.managerFilterState);
   const data = await fetchManagerAgentData(start, end);
 
   let totalTransfers = 0;
@@ -811,7 +709,7 @@ function populateOverrideDropdown() {
   const dropdown = document.getElementById("override-agent-select");
   dropdown.innerHTML = "";
 
-  const users = cachedUsers;
+  const users = appState.cachedUsers;
 
   users.forEach(user => {
     if (user.role === "agent") {
@@ -935,7 +833,7 @@ function populateAnalyticsDropdown() {
   const dropdown = document.getElementById("analytics-agent-select");
   dropdown.innerHTML = "";
 
-  const users = cachedUsers;
+  const users = appState.cachedUsers;
 
   users.forEach(user => {
     if (user.role === "agent") {
@@ -965,7 +863,7 @@ function populateUserManagementDropdown() {
   const dropdown = document.getElementById("manage-user-select");
   dropdown.innerHTML = "";
 
-  const users = cachedUsers;
+  const users = appState.cachedUsers;
 
   users.forEach(user => {
     const option = document.createElement("option");
@@ -1009,14 +907,7 @@ function renderAgentHourlyBreakdown(agentName) {
 }
 
 
-document.addEventListener("DOMContentLoaded", () => {
-  const select = document.getElementById("analytics-agent-select");
-  if (!select) return;
 
-  select.addEventListener("change", function () {
-    renderAgentHourlyBreakdown(this.value);
-  });
-});
 
 
 function logAuditEntry(action, details) {
@@ -1280,7 +1171,7 @@ function getDateRangeDays(start, end) {
 }
 
 async function fetchManagerAgentData(startDate, endDate) {
-  const agents = cachedUsers.filter(u => u.role === "agent");
+  const agents = appState.cachedUsers.filter(u => u.role === "agent");
   const days = getDateRangeDays(startDate, endDate);
 
   const result = {};
@@ -1311,13 +1202,52 @@ async function fetchManagerAgentData(startDate, endDate) {
   return result;
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+if (document.getElementById("manager-dashboard")) {
+  loadSettings();
+}
+
+
+document.addEventListener("DOMContentLoaded", initializeApp);
+
+function initializeApp() {
+  initAuthEvents();           // 🔑 Set up login/logout button listeners
+  restoreSessionIfNeeded();   // 🔄 Restore session if user is already logged in
+
+  if (document.getElementById("manager-dashboard")) {
+    loadSettings(); // 🛠️ Load manager settings
+  }
+
+  // 🧠 Leaderboard Download
+  const leaderboardBtn = document.getElementById("download-leaderboard-btn");
+  if (leaderboardBtn) {
+    leaderboardBtn.addEventListener("click", async () => {
+      const { start, end } = getDateRange(appState.managerFilterState);
+      const data = await fetchManagerAgentData(start, end);
+
+      let csv = "Agent,Transfers,Calls,Conversion (%)\n";
+      Object.entries(data).forEach(([username, stats]) => {
+        const conv = stats.totalCalls > 0
+          ? ((stats.totalTransfers / stats.totalCalls) * 100).toFixed(1)
+          : "0.0";
+        csv += `${username},${stats.totalTransfers},${stats.totalCalls},${conv}\n`;
+      });
+
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `leaderboard_${appState.managerFilterState}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  }
+
+  // 🧠 Audit Log Download
   const auditBtn = document.getElementById("download-audit-btn");
   if (auditBtn) {
     auditBtn.addEventListener("click", function () {
       const logs = JSON.parse(localStorage.getItem("auditLog")) || [];
       let csv = "Timestamp,User,Role,Action,Details\n";
-
       logs.forEach(log => {
         csv += `"${log.timestamp}","${log.user}","${log.role}","${log.action}","${log.details}"\n`;
       });
@@ -1332,6 +1262,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // 🧠 Chatbot UI
   const toggle = document.getElementById("chatbot-toggle");
   const box = document.getElementById("chatbot-container");
   const input = document.getElementById("chatbot-input");
@@ -1371,6 +1302,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // 🧠 Filter Changes (Agent/Manager)
   const agentTime = document.getElementById("agent-time-view");
   if (agentTime) {
     agentTime.addEventListener("change", function () {
@@ -1379,42 +1311,18 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   const managerTime = document.getElementById("manager-time-view");
-if (managerTime) {
-  managerTime.addEventListener("change", function () {
-    managerFilterState = this.value;
-    renderManagerDashboardView(this.value);
-  });
-}
-
-
-  document.addEventListener("DOMContentLoaded", () => {
-  const leaderboardBtn = document.getElementById("download-leaderboard-btn");
-  if (leaderboardBtn) {
-    leaderboardBtn.addEventListener("click", async () => {
-      const { start, end } = getDateRange(managerFilterState);
-      const data = await fetchManagerAgentData(start, end);
-
-      let csv = "Agent,Transfers,Calls,Conversion (%)\n";
-      Object.entries(data).forEach(([username, stats]) => {
-        const conv = stats.totalCalls > 0
-          ? ((stats.totalTransfers / stats.totalCalls) * 100).toFixed(1)
-          : "0.0";
-        csv += `${username},${stats.totalTransfers},${stats.totalCalls},${conv}\n`;
-      });
-
-      const blob = new Blob([csv], { type: "text/csv" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `leaderboard_${managerFilterState}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
+  if (managerTime) {
+    managerTime.addEventListener("change", function () {
+      appState.managerFilterState = this.value;
+      renderManagerDashboardView(this.value);
     });
   }
-});
 
-});
-
-if (document.getElementById("manager-dashboard")) {
-  loadSettings();
+  // 🧠 Analytics Agent Selector
+  const select = document.getElementById("analytics-agent-select");
+  if (select) {
+    select.addEventListener("change", function () {
+      renderAgentHourlyBreakdown(this.value);
+    });
+  }
 }
